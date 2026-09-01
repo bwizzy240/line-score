@@ -381,6 +381,71 @@ function last10Pct(rec) {
   return l10.wins / total;
 }
 
+function gamesPlayed(rec) {
+  if (!rec) return null;
+  const w = Number(rec.leagueRecord?.wins);
+  const l = Number(rec.leagueRecord?.losses);
+  if (isNaN(w) || isNaN(l) || w + l === 0) return null;
+  return w + l;
+}
+
+// Standard normal CDF via Abramowitz-Stegun approximation
+function normalCDF(z) {
+  const t = 1 / (1 + 0.2316419 * Math.abs(z));
+  const d = 0.3989423 * Math.exp(-z * z / 2);
+  let p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+  if (z > 0) p = 1 - p;
+  return p;
+}
+
+// Typical MLB game-to-game standard deviations, based on historical run distributions
+const MARGIN_STD_DEV = 4.8;
+const TOTAL_STD_DEV = 4.2;
+
+function projectRuns(awayRec, homeRec) {
+  const awayGP = gamesPlayed(awayRec);
+  const homeGP = gamesPlayed(homeRec);
+  const awayRS = Number(awayRec?.runsScored);
+  const awayRA = Number(awayRec?.runsAllowed);
+  const homeRS = Number(homeRec?.runsScored);
+  const homeRA = Number(homeRec?.runsAllowed);
+
+  if (!awayGP || !homeGP || isNaN(awayRS) || isNaN(awayRA) || isNaN(homeRS) || isNaN(homeRA)) {
+    return null;
+  }
+
+  const awayRPG = awayRS / awayGP;
+  const awayRAPG = awayRA / awayGP;
+  const homeRPG = homeRS / homeGP;
+  const homeRAPG = homeRA / homeGP;
+
+  const expectedAwayRuns = (awayRPG + homeRAPG) / 2;
+  const expectedHomeRuns = (homeRPG + awayRAPG) / 2;
+
+  return {
+    expectedAwayRuns,
+    expectedHomeRuns,
+    expectedMargin: expectedHomeRuns - expectedAwayRuns,
+    expectedTotal: expectedAwayRuns + expectedHomeRuns
+  };
+}
+
+function runLineProbs(projection, line) {
+  // line is the number the HOME team must cover by, e.g. -1.5 means home must win by 2+
+  // We treat "line" as the magnitude (1.5) and always frame as home -line / away +line
+  if (!projection) return null;
+  const z = (line - projection.expectedMargin) / MARGIN_STD_DEV;
+  const homeCoversProb = 1 - normalCDF(z);
+  return { home: homeCoversProb, away: 1 - homeCoversProb };
+}
+
+function totalProbs(projection, total) {
+  if (!projection) return null;
+  const z = (total - projection.expectedTotal) / TOTAL_STD_DEV;
+  const overProb = 1 - normalCDF(z);
+  return { over: overProb, under: 1 - overProb };
+}
+
 async function renderMatchup(gamePk) {
   const el = document.getElementById('matchupContainer');
   el.innerHTML = '<div class="status">Crunching numbers…</div>';
@@ -428,6 +493,9 @@ async function renderMatchup(gamePk) {
     const homePctDisplay = Math.round(homeWinProb * 100);
     const awayPctDisplay = 100 - homePctDisplay;
 
+    const projection = projectRuns(awayRec, homeRec);
+    const defaultTotal = projection ? (Math.round(projection.expectedTotal * 2) / 2).toFixed(1) : '';
+
     el.innerHTML = `
       <div class="matchup">
         <div class="scoreboard">
@@ -471,6 +539,38 @@ async function renderMatchup(gamePk) {
           </div>
           <div id="resultBox"></div>
         </div>
+
+        <div class="odds-section" style="border-top:1px solid var(--line);">
+          <h3>Run line</h3>
+          <p class="hint">${projection ? `Projected margin: ${projection.expectedHomeRuns.toFixed(1)} - ${projection.expectedAwayRuns.toFixed(1)} (home). Enter the line and odds from your book — usually ±1.5.` : "Not enough run data yet for this matchup."}</p>
+          ${projection ? `
+          <div class="odds-row">
+            <div class="odds-field"><label>Line (home side)</label><input type="text" id="runLineNum" value="-1.5" placeholder="e.g. -1.5"></div>
+            <div class="odds-field"></div>
+          </div>
+          <div class="odds-row">
+            <div class="odds-field"><label>${awayTeam.abbreviation || 'Away'} +1.5 odds</label><input type="text" id="awayRLOdds" placeholder="e.g. -130"></div>
+            <div class="odds-field"><label>${homeTeam.abbreviation || 'Home'} -1.5 odds</label><input type="text" id="homeRLOdds" placeholder="e.g. +110"></div>
+          </div>
+          <div id="runLineResultBox"></div>
+          ` : ''}
+        </div>
+
+        <div class="odds-section" style="border-top:1px solid var(--line);">
+          <h3>Total (over/under)</h3>
+          <p class="hint">${projection ? `Projected total: ${projection.expectedTotal.toFixed(1)} runs. Enter the total line and odds from your book.` : "Not enough run data yet for this matchup."}</p>
+          ${projection ? `
+          <div class="odds-row">
+            <div class="odds-field"><label>Total line</label><input type="text" id="totalNum" value="${defaultTotal}" placeholder="e.g. 8.5"></div>
+            <div class="odds-field"></div>
+          </div>
+          <div class="odds-row">
+            <div class="odds-field"><label>Over odds</label><input type="text" id="overOdds" placeholder="e.g. -110"></div>
+            <div class="odds-field"><label>Under odds</label><input type="text" id="underOdds" placeholder="e.g. -110"></div>
+          </div>
+          <div id="totalResultBox"></div>
+          ` : ''}
+        </div>
       </div>
     `;
 
@@ -488,6 +588,34 @@ async function renderMatchup(gamePk) {
     const compute = () => computeEdge(awayInput.value, homeInput.value, awayWinProb, homeWinProb, awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME');
     awayInput.addEventListener('input', compute);
     homeInput.addEventListener('input', compute);
+
+    if (projection) {
+      const runLineNumInput = document.getElementById('runLineNum');
+      const awayRLInput = document.getElementById('awayRLOdds');
+      const homeRLInput = document.getElementById('homeRLOdds');
+      const computeRL = () => {
+        const lineVal = parseFloat(runLineNumInput.value);
+        if (isNaN(lineVal)) { document.getElementById('runLineResultBox').innerHTML = ''; return; }
+        const probs = runLineProbs(projection, Math.abs(lineVal));
+        computeRunLineEdge(awayRLInput.value, homeRLInput.value, probs, awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME', Math.abs(lineVal));
+      };
+      runLineNumInput.addEventListener('input', computeRL);
+      awayRLInput.addEventListener('input', computeRL);
+      homeRLInput.addEventListener('input', computeRL);
+
+      const totalNumInput = document.getElementById('totalNum');
+      const overInput = document.getElementById('overOdds');
+      const underInput = document.getElementById('underOdds');
+      const computeTotal = () => {
+        const totalVal = parseFloat(totalNumInput.value);
+        if (isNaN(totalVal)) { document.getElementById('totalResultBox').innerHTML = ''; return; }
+        const probs = totalProbs(projection, totalVal);
+        computeTotalEdge(overInput.value, underInput.value, probs, totalVal);
+      };
+      totalNumInput.addEventListener('input', computeTotal);
+      overInput.addEventListener('input', computeTotal);
+      underInput.addEventListener('input', computeTotal);
+    }
 
   } catch (err) {
     el.innerHTML = `<div class="error-box">Couldn't compute this matchup: ${err.message}</div>`;
@@ -518,11 +646,69 @@ function computeEdge(awayOddsStr, homeOddsStr, awayModelProb, homeModelProb, awa
       <div class="team-abbr">${abbr}</div>
       <div class="implied">${(implied * 100).toFixed(1)}%</div>
       <div class="edge ${edgeSpanClass}">${edgeText}</div>
-      <button class="log-bet-btn" onclick="logBet('${side}')">Log bet</button>
+      <button class="log-bet-btn" onclick="logBet('moneyline','${side}')">Log bet</button>
     </div>`;
   }
 
   box.innerHTML = `<div class="result">${colHTML(awayAbbr, awayImplied, awayModelProb, 'away')}${colHTML(homeAbbr, homeImplied, homeModelProb, 'home')}</div>`;
+}
+
+function computeRunLineEdge(awayOddsStr, homeOddsStr, probs, awayAbbr, homeAbbr, lineVal) {
+  const box = document.getElementById('runLineResultBox');
+  const awayImplied = americanToImplied(awayOddsStr);
+  const homeImplied = americanToImplied(homeOddsStr);
+  lastRunLineState = {
+    awayAbbr, homeAbbr, lineVal,
+    awayOddsStr, homeOddsStr, awayImplied, homeImplied,
+    awayModelProb: probs ? probs.away : null,
+    homeModelProb: probs ? probs.home : null
+  };
+  if (!probs || (awayImplied === null && homeImplied === null)) { box.innerHTML = ''; return; }
+
+  function colHTML(label, implied, modelProb, side) {
+    if (implied === null) return `<div class="col"><div class="team-abbr">${label}</div><div class="implied">—</div></div>`;
+    const edge = (modelProb - implied) * 100;
+    const edgeClass = edge > 0 ? 'edge-pos' : (edge < 0 ? 'edge-neg' : '');
+    const edgeText = edge > 0 ? `+${edge.toFixed(1)}% model edge` : `${edge.toFixed(1)}% vs model`;
+    const edgeSpanClass = edge > 0 ? 'pos' : 'neg';
+    return `<div class="col ${edgeClass}">
+      <div class="team-abbr">${label}</div>
+      <div class="implied">${(implied * 100).toFixed(1)}%</div>
+      <div class="edge ${edgeSpanClass}">${edgeText}</div>
+      <button class="log-bet-btn" onclick="logBet('runline','${side}')">Log bet</button>
+    </div>`;
+  }
+
+  box.innerHTML = `<div class="result">${colHTML(`${awayAbbr} +${lineVal}`, awayImplied, probs.away, 'away')}${colHTML(`${homeAbbr} -${lineVal}`, homeImplied, probs.home, 'home')}</div>`;
+}
+
+function computeTotalEdge(overOddsStr, underOddsStr, probs, totalVal) {
+  const box = document.getElementById('totalResultBox');
+  const overImplied = americanToImplied(overOddsStr);
+  const underImplied = americanToImplied(underOddsStr);
+  lastTotalState = {
+    totalVal,
+    overOddsStr, underOddsStr, overImplied, underImplied,
+    overModelProb: probs ? probs.over : null,
+    underModelProb: probs ? probs.under : null
+  };
+  if (!probs || (overImplied === null && underImplied === null)) { box.innerHTML = ''; return; }
+
+  function colHTML(label, implied, modelProb, side) {
+    if (implied === null) return `<div class="col"><div class="team-abbr">${label}</div><div class="implied">—</div></div>`;
+    const edge = (modelProb - implied) * 100;
+    const edgeClass = edge > 0 ? 'edge-pos' : (edge < 0 ? 'edge-neg' : '');
+    const edgeText = edge > 0 ? `+${edge.toFixed(1)}% model edge` : `${edge.toFixed(1)}% vs model`;
+    const edgeSpanClass = edge > 0 ? 'pos' : 'neg';
+    return `<div class="col ${edgeClass}">
+      <div class="team-abbr">${label}</div>
+      <div class="implied">${(implied * 100).toFixed(1)}%</div>
+      <div class="edge ${edgeSpanClass}">${edgeText}</div>
+      <button class="log-bet-btn" onclick="logBet('total','${side}')">Log bet</button>
+    </div>`;
+  }
+
+  box.innerHTML = `<div class="result">${colHTML(`Over ${totalVal}`, overImplied, probs.over, 'over')}${colHTML(`Under ${totalVal}`, underImplied, probs.under, 'under')}</div>`;
 }
 
 document.getElementById('prevDay').addEventListener('click', () => {
@@ -572,6 +758,8 @@ setInterval(refreshLiveScores, 30000);
 // ---- Bet tracking ----
 let currentMatchup = null;
 let lastEdgeState = null;
+let lastRunLineState = null;
+let lastTotalState = null;
 
 const BETS_KEY = 'lineScoreBets';
 function loadBets() {
@@ -582,23 +770,44 @@ function saveBets(bets) {
   localStorage.setItem(BETS_KEY, JSON.stringify(bets));
 }
 
-function logBet(side) {
-  if (!currentMatchup || !lastEdgeState) return;
-  const isAway = side === 'away';
-  const oddsStr = isAway ? lastEdgeState.awayOddsStr : lastEdgeState.homeOddsStr;
-  const modelProb = isAway ? lastEdgeState.awayModelProb : lastEdgeState.homeModelProb;
-  const teamName = isAway ? currentMatchup.awayName : currentMatchup.homeName;
-  const abbr = isAway ? currentMatchup.awayAbbr : currentMatchup.homeAbbr;
+function logBet(betType, side) {
+  if (!currentMatchup) return;
+  let oddsStr, modelProb, label;
 
-  if (!oddsStr) return;
+  if (betType === 'moneyline') {
+    if (!lastEdgeState) return;
+    const isAway = side === 'away';
+    oddsStr = isAway ? lastEdgeState.awayOddsStr : lastEdgeState.homeOddsStr;
+    modelProb = isAway ? lastEdgeState.awayModelProb : lastEdgeState.homeModelProb;
+    label = isAway ? `${currentMatchup.awayName} ML` : `${currentMatchup.homeName} ML`;
+  } else if (betType === 'runline') {
+    if (!lastRunLineState) return;
+    const isAway = side === 'away';
+    oddsStr = isAway ? lastRunLineState.awayOddsStr : lastRunLineState.homeOddsStr;
+    modelProb = isAway ? lastRunLineState.awayModelProb : lastRunLineState.homeModelProb;
+    label = isAway
+      ? `${currentMatchup.awayName} +${lastRunLineState.lineVal}`
+      : `${currentMatchup.homeName} -${lastRunLineState.lineVal}`;
+  } else if (betType === 'total') {
+    if (!lastTotalState) return;
+    const isOver = side === 'over';
+    oddsStr = isOver ? lastTotalState.overOddsStr : lastTotalState.underOddsStr;
+    modelProb = isOver ? lastTotalState.overModelProb : lastTotalState.underModelProb;
+    label = `${isOver ? 'Over' : 'Under'} ${lastTotalState.totalVal}`;
+  } else {
+    return;
+  }
+
+  if (!oddsStr || modelProb === null || modelProb === undefined) return;
 
   const bets = loadBets();
   bets.unshift({
-    id: `${currentMatchup.gamePk}-${side}-${Date.now()}`,
+    id: `${currentMatchup.gamePk}-${betType}-${side}-${Date.now()}`,
     gamePk: currentMatchup.gamePk,
     matchup: `${currentMatchup.awayAbbr} @ ${currentMatchup.homeAbbr}`,
-    team: teamName,
-    abbr,
+    betType,
+    team: label,
+    abbr: label,
     odds: oddsStr,
     modelProb,
     loggedAt: new Date().toISOString(),
@@ -607,10 +816,11 @@ function logBet(side) {
   });
   saveBets(bets);
 
-  const box = document.getElementById('resultBox');
+  const boxId = betType === 'moneyline' ? 'resultBox' : (betType === 'runline' ? 'runLineResultBox' : 'totalResultBox');
+  const box = document.getElementById(boxId);
   const note = document.createElement('div');
   note.style.cssText = 'text-align:center;font-size:12px;color:var(--field);margin-top:8px;';
-  note.textContent = `Logged: ${abbr} at ${oddsStr}`;
+  note.textContent = `Logged: ${label} at ${oddsStr}`;
   box.appendChild(note);
 }
 
