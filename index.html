@@ -309,6 +309,23 @@
   .bet-card.result-won { border-left: 4px solid var(--field); }
   .bet-card.result-lost { border-left: 4px solid var(--neg); }
   .bet-card .delete-bet { color: var(--ink-soft); font-size: 11px; text-decoration: underline; background: none; border: none; cursor: pointer; padding: 0; margin-top: 8px; }
+  .parlay-section-title {
+    padding: 16px 18px 6px; font-family: 'Arial Narrow', sans-serif; font-size: 14px;
+    text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink);
+  }
+  .parlay-card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 16px; margin: 8px 16px; box-shadow: 0 1px 3px rgba(28,38,32,0.06);
+  }
+  .parlay-legs { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  .parlay-leg { display: flex; justify-content: space-between; font-size: 13px; }
+  .parlay-leg .leg-prob { color: var(--ink-soft); font-family: 'SF Mono', ui-monospace, monospace; }
+  .parlay-footer {
+    display: flex; justify-content: space-between; align-items: center;
+    border-top: 1px dashed var(--line); padding-top: 10px;
+  }
+  .parlay-combined { font-size: 20px; font-weight: 800; font-family: 'SF Mono', ui-monospace, monospace; color: var(--field); }
+  .parlay-fairodds { font-size: 11px; color: var(--ink-soft); }
 </style>
 </head>
 <body>
@@ -320,6 +337,7 @@
 
 <div class="tabbar">
   <button id="tabGames" class="tab active">Games</button>
+  <button id="tabParlays" class="tab">Parlays</button>
   <button id="tabBets" class="tab">My Bets</button>
 </div>
 
@@ -334,6 +352,7 @@
     <div id="gamesContainer" class="status">Loading today's games…</div>
     <div id="matchupContainer"></div>
   </div>
+  <div id="parlaysView" style="display:none;"></div>
   <div id="betsView" style="display:none;"></div>
 </main>
 
@@ -624,6 +643,25 @@ function blendPct(overall, pyth, split, l10) {
   return weightSum > 0 ? valueSum / weightSum : 0.5;
 }
 
+function computeBaseWinProb(awayRec, homeRec) {
+  const awayPct = blendPct(pctFromRecord(awayRec), pythPct(awayRec), splitPct(awayRec, 'away'), last10Pct(awayRec));
+  const homePct = blendPct(pctFromRecord(homeRec), pythPct(homeRec), splitPct(homeRec, 'home'), last10Pct(homeRec));
+  const homeWinProb = log5(homePct, awayPct);
+  return { homeWinProb, awayWinProb: 1 - homeWinProb };
+}
+
+function applyParkFactor(projection, homeTeamId) {
+  const park = getParkData(homeTeamId);
+  if (projection && park) {
+    const scale = park.factor / 100;
+    projection.expectedAwayRuns *= scale;
+    projection.expectedHomeRuns *= scale;
+    projection.expectedMargin = projection.expectedHomeRuns - projection.expectedAwayRuns;
+    projection.expectedTotal = projection.expectedAwayRuns + projection.expectedHomeRuns;
+  }
+  return park;
+}
+
 // Approximate long-run park factors (100 = neutral run environment) and park orientation
 // (compass bearing in degrees from home plate toward center field). These are well-established,
 // slowly-changing public reference values, not pulled from an API.
@@ -782,19 +820,8 @@ async function renderMatchup(gamePk) {
       getKalshiRunLine(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME')
     ]);
 
-    const awayOverall = pctFromRecord(awayRec);
-    const homeOverall = pctFromRecord(homeRec);
-    const awayPyth = pythPct(awayRec);
-    const homePyth = pythPct(homeRec);
-    const awaySplit = splitPct(awayRec, 'away');
-    const homeSplit = splitPct(homeRec, 'home');
-    const awayL10 = last10Pct(awayRec);
-    const homeL10 = last10Pct(homeRec);
-
-    const awayPct = blendPct(awayOverall, awayPyth, awaySplit, awayL10);
-    const homePct = blendPct(homeOverall, homePyth, homeSplit, homeL10);
-
-    let homeWinProb = log5(homePct, awayPct);
+    const { homeWinProb: baseHomeWinProb } = computeBaseWinProb(awayRec, homeRec);
+    let homeWinProb = baseHomeWinProb;
 
     if (awayERA && homeERA && awayERA.ip > 15 && homeERA.ip > 15) {
       const awayVal = awayERA.fip ?? awayERA.era;
@@ -831,16 +858,7 @@ async function renderMatchup(gamePk) {
     const awayPctDisplay = 100 - homePctDisplay;
 
     const projection = projectRuns(awayRec, homeRec);
-    const park = getParkData(homeTeam.id);
-
-    if (projection && park) {
-      // Park factor scales the whole scoring environment, applied before other situational nudges.
-      const scale = park.factor / 100;
-      projection.expectedAwayRuns *= scale;
-      projection.expectedHomeRuns *= scale;
-      projection.expectedMargin = projection.expectedHomeRuns - projection.expectedAwayRuns;
-      projection.expectedTotal = projection.expectedAwayRuns + projection.expectedHomeRuns;
-    }
+    const park = applyParkFactor(projection, homeTeam.id);
 
     const awayFatigueRuns = fatigueRunsAdjustment(awayWorkload);
     const homeFatigueRuns = fatigueRunsAdjustment(homeWorkload);
@@ -1409,6 +1427,7 @@ function renderBetsView() {
       html += `
         <div class="bet-card ${resultClass}">
           <div class="bet-top"><span>${b.abbr} · ${b.matchup}</span><span>${b.odds}</span></div>
+          ${b.legs ? `<div class="bet-meta">${b.legs.map(l => `${l.label} (${(l.prob * 100).toFixed(0)}%)`).join(' + ')}</div>` : ''}
           <div class="bet-meta">Model had it at ${(b.modelProb * 100).toFixed(1)}% · logged ${new Date(b.loggedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
           <div class="bet-actions">
             <button class="won" onclick="setBetResult('${b.id}','won')">${b.result === 'won' ? '✓ Won' : 'Won'}</button>
@@ -1423,21 +1442,195 @@ function renderBetsView() {
   view.innerHTML = html;
 }
 
-document.getElementById('tabGames').addEventListener('click', () => {
-  document.getElementById('tabGames').classList.add('active');
-  document.getElementById('tabBets').classList.remove('active');
-  document.getElementById('gamesView').style.display = '';
-  document.getElementById('datebarEl').style.display = '';
-  document.getElementById('betsView').style.display = 'none';
-});
-document.getElementById('tabBets').addEventListener('click', () => {
-  document.getElementById('tabBets').classList.add('active');
-  document.getElementById('tabGames').classList.remove('active');
-  document.getElementById('betsView').style.display = '';
-  document.getElementById('datebarEl').style.display = 'none';
-  document.getElementById('gamesView').style.display = 'none';
-  renderBetsView();
-});
+// ---- Parlay Finder ----
+async function fetchAllStandings(season) {
+  try {
+    const data = await fetchJSON(`/api/standings?season=${season}`);
+    const map = new Map();
+    (data.records || []).forEach(division => {
+      (division.teamRecords || []).forEach(rec => {
+        if (rec.team && rec.team.id != null) map.set(rec.team.id, rec);
+      });
+    });
+    return map;
+  } catch (e) {
+    return new Map();
+  }
+}
+
+function combinations(arr, k) {
+  const results = [];
+  function helper(start, combo) {
+    if (combo.length === k) { results.push(combo.slice()); return; }
+    for (let i = start; i < arr.length; i++) {
+      combo.push(arr[i]);
+      helper(i + 1, combo);
+      combo.pop();
+    }
+  }
+  helper(0, []);
+  return results;
+}
+
+async function loadParlayFinder() {
+  const view = document.getElementById('parlaysView');
+  view.innerHTML = '<div class="status">Scanning today\'s slate…</div>';
+
+  try {
+    const dateStr = fmtDate(currentDate);
+    const data = await fetchJSON(`/api/schedule?date=${dateStr}`);
+    const dates = data.dates || [];
+    const games = dates.length ? dates[0].games : [];
+    const upcoming = games.filter(g => g.status && g.status.abstractGameState === 'Preview');
+
+    if (!upcoming.length) {
+      view.innerHTML = '<div class="status">No upcoming games this day to build parlays from.</div>';
+      return;
+    }
+
+    const season = new Date(currentDate).getFullYear();
+    const standingsMap = await fetchAllStandings(season);
+
+    const legs = [];
+    upcoming.forEach(g => {
+      const awayTeam = g.teams.away.team;
+      const homeTeam = g.teams.home.team;
+      const awayRec = standingsMap.get(awayTeam.id);
+      const homeRec = standingsMap.get(homeTeam.id);
+      if (!awayRec || !homeRec) return;
+
+      const matchupLabel = `${awayTeam.abbreviation || 'AWAY'} @ ${homeTeam.abbreviation || 'HOME'}`;
+
+      // Moneyline: take whichever side is favored
+      const { homeWinProb, awayWinProb } = computeBaseWinProb(awayRec, homeRec);
+      if (homeWinProb >= awayWinProb) {
+        legs.push({ gamePk: g.gamePk, matchup: matchupLabel, betType: 'ML', label: `${homeTeam.abbreviation} ML`, prob: homeWinProb });
+      } else {
+        legs.push({ gamePk: g.gamePk, matchup: matchupLabel, betType: 'ML', label: `${awayTeam.abbreviation} ML`, prob: awayWinProb });
+      }
+
+      // Run line & total, using park factor (free, no extra fetch) but skipping weather/fatigue/pitcher detail
+      const projection = projectRuns(awayRec, homeRec);
+      if (projection) {
+        applyParkFactor(projection, homeTeam.id);
+
+        const rlProbs = runLineProbs(projection, 1.5);
+        if (rlProbs) {
+          if (rlProbs.home >= rlProbs.away) {
+            legs.push({ gamePk: g.gamePk, matchup: matchupLabel, betType: 'RL', label: `${homeTeam.abbreviation} -1.5`, prob: rlProbs.home });
+          } else {
+            legs.push({ gamePk: g.gamePk, matchup: matchupLabel, betType: 'RL', label: `${awayTeam.abbreviation} +1.5`, prob: rlProbs.away });
+          }
+        }
+
+        const totalLine = Math.round(projection.expectedTotal * 2) / 2;
+        const totProbs = totalProbs(projection, totalLine);
+        if (totProbs) {
+          if (totProbs.over >= totProbs.under) {
+            legs.push({ gamePk: g.gamePk, matchup: matchupLabel, betType: 'TOT', label: `Over ${totalLine}`, prob: totProbs.over });
+          } else {
+            legs.push({ gamePk: g.gamePk, matchup: matchupLabel, betType: 'TOT', label: `Under ${totalLine}`, prob: totProbs.under });
+          }
+        }
+      }
+    });
+
+    if (legs.length < 2) {
+      view.innerHTML = '<div class="status">Not enough games with usable data to build parlays yet.</div>';
+      return;
+    }
+
+    function buildTopParlays(legCount, topN) {
+      const combos = combinations(legs, legCount)
+        .filter(combo => new Set(combo.map(l => l.gamePk)).size === combo.length) // different games only
+        .map(combo => ({
+          legs: combo,
+          combinedProb: combo.reduce((p, l) => p * l.prob, 1)
+        }))
+        .sort((a, b) => b.combinedProb - a.combinedProb)
+        .slice(0, topN);
+      return combos;
+    }
+
+    const twoLeg = buildTopParlays(2, 8);
+    const threeLeg = buildTopParlays(3, 8);
+
+    function parlayCardHTML(p, idx) {
+      const fairOdds = probToAmerican(p.combinedProb);
+      const fairOddsStr = fairOdds > 0 ? `+${fairOdds}` : `${fairOdds}`;
+      return `
+        <div class="parlay-card">
+          <div class="parlay-legs">
+            ${p.legs.map(l => `<div class="parlay-leg"><span>${l.label} <span style="color:var(--ink-soft);">(${l.matchup})</span></span><span class="leg-prob">${(l.prob * 100).toFixed(0)}%</span></div>`).join('')}
+          </div>
+          <div class="parlay-footer">
+            <div>
+              <div class="parlay-combined">${(p.combinedProb * 100).toFixed(1)}%</div>
+              <div class="parlay-fairodds">fair odds ~${fairOddsStr}</div>
+            </div>
+            <button class="log-bet-btn" style="width:auto; padding:8px 14px;" onclick="logParlay(${idx}, ${p.legs.length})">Log this parlay</button>
+          </div>
+        </div>
+      `;
+    }
+
+    window._parlayCache = { twoLeg, threeLeg };
+
+    let html = `
+      <div class="status" style="padding:14px 18px; text-align:left;">
+        Ranked by combined probability across ${upcoming.length} upcoming games. These use season record, run differential, splits, form, and park factor — not the deeper per-game detail (starters, weather, bullpen) you get by opening a game directly. Independent games only — legs never share a game.
+      </div>
+      <div class="parlay-section-title">Top 2-leg parlays</div>
+      ${twoLeg.map((p, i) => parlayCardHTML(p, i)).join('') || '<div class="status">No valid 2-leg combos found.</div>'}
+      <div class="parlay-section-title">Top 3-leg parlays</div>
+      ${threeLeg.map((p, i) => parlayCardHTML(p, i)).join('') || '<div class="status">No valid 3-leg combos found.</div>'}
+    `;
+
+    view.innerHTML = html;
+  } catch (err) {
+    view.innerHTML = `<div class="error-box">Couldn't build parlays: ${err.message}</div>`;
+  }
+}
+
+function logParlay(idx, legCount) {
+  const cache = window._parlayCache;
+  if (!cache) return;
+  const p = legCount === 2 ? cache.twoLeg[idx] : cache.threeLeg[idx];
+  if (!p) return;
+
+  const bets = loadBets();
+  bets.unshift({
+    id: `parlay-${Date.now()}`,
+    gamePk: null,
+    matchup: p.legs.map(l => l.matchup).join(' / '),
+    betType: 'parlay',
+    team: `${legCount}-leg parlay`,
+    abbr: `${legCount}-leg parlay`,
+    odds: (() => { const o = probToAmerican(p.combinedProb); return o > 0 ? `+${o}` : `${o}`; })(),
+    modelProb: p.combinedProb,
+    legs: p.legs,
+    loggedAt: new Date().toISOString(),
+    gameDate: null,
+    result: null
+  });
+  saveBets(bets);
+}
+
+function showTab(tabName) {
+  const tabs = { games: 'tabGames', parlays: 'tabParlays', bets: 'tabBets' };
+  const views = { games: 'gamesView', parlays: 'parlaysView', bets: 'betsView' };
+  Object.keys(tabs).forEach(key => {
+    document.getElementById(tabs[key]).classList.toggle('active', key === tabName);
+    document.getElementById(views[key]).style.display = key === tabName ? '' : 'none';
+  });
+  document.getElementById('datebarEl').style.display = tabName === 'games' ? '' : 'none';
+  if (tabName === 'bets') renderBetsView();
+  if (tabName === 'parlays') loadParlayFinder();
+}
+
+document.getElementById('tabGames').addEventListener('click', () => showTab('games'));
+document.getElementById('tabParlays').addEventListener('click', () => showTab('parlays'));
+document.getElementById('tabBets').addEventListener('click', () => showTab('bets'));
 
 loadGames();
 </script>
