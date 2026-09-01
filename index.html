@@ -132,6 +132,78 @@
     background: #FBEEEC; border: 1px solid var(--neg); color: var(--neg);
     padding: 14px; border-radius: 3px; font-size: 13px; margin-bottom: 16px;
   }
+  .bet-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--line);
+    background: var(--chalk);
+  }
+  .bet-tab {
+    flex: 1;
+    padding: 12px 6px;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    font-family: 'Arial Narrow', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--ink-soft);
+    cursor: pointer;
+  }
+  .bet-tab.active {
+    color: var(--ink);
+    border-bottom-color: var(--amber);
+  }
+  .bet-panel { padding: 16px 18px; }
+  .plain-hint {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    line-height: 1.5;
+    margin: 0 0 14px;
+  }
+  details.game-details {
+    border-top: 1px solid var(--line);
+  }
+  details.game-details summary {
+    padding: 14px 18px;
+    cursor: pointer;
+    font-family: 'Arial Narrow', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: var(--field);
+    list-style: none;
+  }
+  details.game-details summary::-webkit-details-marker { display: none; }
+  details.game-details summary::before {
+    content: '+ ';
+  }
+  details.game-details[open] summary::before {
+    content: '– ';
+  }
+  details.game-details .details-inner {
+    padding: 0 18px 16px;
+  }
+  .detail-block {
+    margin-bottom: 14px;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .detail-block .detail-title {
+    font-weight: bold;
+    color: var(--ink);
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.3px;
+    margin-bottom: 4px;
+  }
+  .detail-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
   .tabbar {
     display: flex; background: var(--field-dark); border-bottom: 1px solid #375943;
   }
@@ -677,53 +749,24 @@ async function renderMatchup(gamePk) {
           ${statusLabel(game)}
         </div>
         <div class="probbar-wrap">
-          <div class="probbar-label"><span>Model win probability</span><span>Run diff · splits · form · ERA</span></div>
+          <div class="probbar-label"><span>Chance to win</span></div>
           <div class="probbar">
             <div class="away" style="width:${awayPctDisplay}%"></div>
             <div class="home" style="width:${homePctDisplay}%"></div>
           </div>
           <div class="probbar-nums"><span>${awayPctDisplay}%</span><span>${homePctDisplay}%</span></div>
-          ${h2h && h2h.gamesPlayed > 0 ? `<div style="text-align:center; font-size:11px; color:var(--ink-soft); margin-top:8px;">Season series: ${awayTeam.abbreviation || 'Away'} ${h2h.wins}-${h2h.losses} vs ${homeTeam.abbreviation || 'Home'}${h2h.gamesPlayed < 3 ? ' (too few games to factor in yet)' : ''}</div>` : ''}
-        </div>
-        <div class="pitchers">
-          <div>
-            <div class="label">${awayPitcher ? awayPitcher.fullName : 'TBD'}</div>
-            ${awayERA ? `ERA ${awayERA.era.toFixed(2)}${awayERA.fip !== null ? ` · FIP ${awayERA.fip.toFixed(2)}` : ''}` : 'No stats yet'}
-          </div>
-          <div>
-            <div class="label">${homePitcher ? homePitcher.fullName : 'TBD'}</div>
-            ${homeERA ? `ERA ${homeERA.era.toFixed(2)}${homeERA.fip !== null ? ` · FIP ${homeERA.fip.toFixed(2)}` : ''}` : 'No stats yet'}
-          </div>
+          <div style="text-align:center; font-size:11px; color:var(--ink-soft); margin-top:8px;">Based on team strength, recent form, ballpark, and today's starters</div>
+          ${h2h && h2h.gamesPlayed > 0 ? `<div style="text-align:center; font-size:11px; color:var(--ink-soft); margin-top:4px;">Season series: ${awayTeam.abbreviation || 'Away'} ${h2h.wins}-${h2h.losses} vs ${homeTeam.abbreviation || 'Home'}${h2h.gamesPlayed < 3 ? ' (too few games to count yet)' : ''}</div>` : ''}
         </div>
 
-        <div class="pitchers" style="border-bottom:1px solid var(--line);">
-          ${lineup && lineup.lineupsPosted ? `
-            <div>
-              <div class="label">${awayTeam.abbreviation || 'Away'} lineup</div>
-              ${lineup.awayLineup.map((p, i) => `${i + 1}. ${p.name} (${p.position})`).join('<br>')}
-            </div>
-            <div>
-              <div class="label">${homeTeam.abbreviation || 'Home'} lineup</div>
-              ${lineup.homeLineup.map((p, i) => `${i + 1}. ${p.name} (${p.position})`).join('<br>')}
-            </div>
-          ` : `<div style="grid-column: 1 / -1; color: var(--ink-soft);">Lineups not posted yet — usually available 1-2 hours before first pitch.</div>`}
+        <div class="bet-tabs">
+          <button class="bet-tab active" data-panel="panel-moneyline">Moneyline</button>
+          <button class="bet-tab" data-panel="panel-runline">Run Line</button>
+          <button class="bet-tab" data-panel="panel-total">Total</button>
         </div>
 
-        ${(awayMoves && awayMoves.transactions.length) || (homeMoves && homeMoves.transactions.length) ? `
-        <div class="pitchers" style="border-bottom:1px solid var(--line); font-size: 11px;">
-          <div>
-            <div class="label">${awayTeam.abbreviation || 'Away'} recent IL moves</div>
-            ${awayMoves && awayMoves.transactions.length ? awayMoves.transactions.map(t => `${t.date}: ${t.description}`).join('<br>') : 'None in last 14 days'}
-          </div>
-          <div>
-            <div class="label">${homeTeam.abbreviation || 'Home'} recent IL moves</div>
-            ${homeMoves && homeMoves.transactions.length ? homeMoves.transactions.map(t => `${t.date}: ${t.description}`).join('<br>') : 'None in last 14 days'}
-          </div>
-        </div>
-        ` : ''}
-        <div class="odds-section">
-          <h3>Compare to your odds</h3>
-          <p class="hint">Enter the moneyline odds you see on your book/app (American format, e.g. -150 or +130) to see the implied probability and whether the model sees an edge.</p>
+        <div class="bet-panel" id="panel-moneyline">
+          <p class="plain-hint">Pick who wins. Type in the odds from your book — we'll tell you the implied chance those odds represent, and whether our estimate is higher or lower ("edge").</p>
           <div class="odds-row">
             <div class="odds-field"><label>${awayTeam.abbreviation || 'Away'} odds</label><input type="text" id="awayOdds" placeholder="e.g. +130"></div>
             <div class="odds-field"><label>${homeTeam.abbreviation || 'Home'} odds</label><input type="text" id="homeOdds" placeholder="e.g. -150"></div>
@@ -731,10 +774,8 @@ async function renderMatchup(gamePk) {
           <div id="resultBox"></div>
         </div>
 
-        <div class="odds-section" style="border-top:1px solid var(--line);">
-          <h3>Run line</h3>
-          ${(awayWorkload || homeWorkload) ? `<p class="hint">Bullpen workload (last 3 days): ${awayTeam.abbreviation || 'Away'} ${awayWorkload ? awayWorkload.gamesInLast3Days + ' games' + (awayWorkload.doubleHeaderRecently ? ' incl. doubleheader' : '') : '—'} · ${homeTeam.abbreviation || 'Home'} ${homeWorkload ? homeWorkload.gamesInLast3Days + ' games' + (homeWorkload.doubleHeaderRecently ? ' incl. doubleheader' : '') : '—'}. A heavier stretch nudges the projected runs against that team.</p>` : ''}
-          <p class="hint">${projection ? `Projected margin: ${projection.expectedHomeRuns.toFixed(1)} - ${projection.expectedAwayRuns.toFixed(1)} (home). Enter the line and odds from your book — usually ±1.5.` : "Not enough run data yet for this matchup."}</p>
+        <div class="bet-panel" id="panel-runline" style="display:none;">
+          <p class="plain-hint">Pick who wins by more than the line (usually ±1.5 runs). ${projection ? `We project the score around ${projection.expectedHomeRuns.toFixed(1)} - ${projection.expectedAwayRuns.toFixed(1)} (home).` : "Not enough run data yet for this matchup."}</p>
           ${projection ? `
           <div class="odds-row">
             <div class="odds-field"><label>Line (home side)</label><input type="text" id="runLineNum" value="-1.5" placeholder="e.g. -1.5"></div>
@@ -748,13 +789,8 @@ async function renderMatchup(gamePk) {
           ` : ''}
         </div>
 
-        <div class="odds-section" style="border-top:1px solid var(--line);">
-          <h3>Total (over/under)</h3>
-          ${park ? `<p class="hint">${park.name}: ${park.factor > 102 ? 'hitter-friendly' : (park.factor < 98 ? 'pitcher-friendly' : 'roughly neutral')} park (factor ${park.factor}).</p>` : ''}
-          ${weather && weather.isDome ? `<p class="hint">${weather.venueName} has a ${weather.roofType ? weather.roofType.toLowerCase() : 'dome'} — wind isn't a factor here.</p>` : ''}
-          ${weather && weather.available && !weather.isDome ? `<p class="hint">Current conditions at ${weather.venueName}: ${Math.round(weather.tempF)}°F, wind ${Math.round(weather.windMph)} mph${wind ? ` blowing ${wind.direction === 'out' ? 'out (favors offense)' : (wind.direction === 'in' ? 'in (favors pitching)' : 'crosswise, limited effect')}` : ''}${weather.precipNow > 0 ? `, rain currently falling` : ''}. This is real-time, not a forecast for first pitch — if the game is hours away, conditions may shift by then. Temp, park, and wind are all already folded into the projection below.</p>` : ''}
-          ${weather && !weather.available ? `<p class="hint">Current conditions not available right now.</p>` : ''}
-          <p class="hint">${projection ? `Projected total: ${projection.expectedTotal.toFixed(1)} runs. Enter the total line and odds from your book.` : "Not enough run data yet for this matchup."}</p>
+        <div class="bet-panel" id="panel-total" style="display:none;">
+          <p class="plain-hint">Pick whether total runs scored lands over or under a number. ${projection ? `We project ${projection.expectedTotal.toFixed(1)} total runs${park ? ` at ${park.name}` : ''}.` : "Not enough run data yet for this matchup."}</p>
           ${projection ? `
           <div class="odds-row">
             <div class="odds-field"><label>Total line</label><input type="text" id="totalNum" value="${defaultTotal}" placeholder="e.g. 8.5"></div>
@@ -767,6 +803,55 @@ async function renderMatchup(gamePk) {
           <div id="totalResultBox"></div>
           ` : ''}
         </div>
+
+        <details class="game-details">
+          <summary>Game details — starters, weather, lineups, injuries</summary>
+          <div class="details-inner">
+            <div class="detail-block">
+              <div class="detail-title">Starting pitchers</div>
+              <div class="detail-cols">
+                <div>${awayPitcher ? awayPitcher.fullName : 'TBD'}${awayERA ? `<br>ERA ${awayERA.era.toFixed(2)}${awayERA.fip !== null ? ` · FIP ${awayERA.fip.toFixed(2)}` : ''}` : '<br>No stats yet'}</div>
+                <div>${homePitcher ? homePitcher.fullName : 'TBD'}${homeERA ? `<br>ERA ${homeERA.era.toFixed(2)}${homeERA.fip !== null ? ` · FIP ${homeERA.fip.toFixed(2)}` : ''}` : '<br>No stats yet'}</div>
+              </div>
+            </div>
+
+            ${park || (weather && weather.available) ? `
+            <div class="detail-block">
+              <div class="detail-title">Park & weather</div>
+              ${park ? `${park.name}: ${park.factor > 102 ? 'hitter-friendly' : (park.factor < 98 ? 'pitcher-friendly' : 'roughly neutral')} (factor ${park.factor})<br>` : ''}
+              ${weather && weather.isDome ? `Roof/dome — wind isn't a factor here.` : ''}
+              ${weather && weather.available && !weather.isDome ? `${Math.round(weather.tempF)}°F, wind ${Math.round(weather.windMph)} mph${wind ? ` blowing ${wind.direction === 'out' ? 'out (favors offense)' : (wind.direction === 'in' ? 'in (favors pitching)' : 'crosswise)')}` : ''}${weather.precipNow > 0 ? `, rain currently falling` : ''} — current conditions, not a first-pitch forecast.` : ''}
+            </div>
+            ` : ''}
+
+            ${(awayWorkload || homeWorkload) ? `
+            <div class="detail-block">
+              <div class="detail-title">Bullpen workload (last 3 days)</div>
+              ${awayTeam.abbreviation || 'Away'} ${awayWorkload ? awayWorkload.gamesInLast3Days + ' games' + (awayWorkload.doubleHeaderRecently ? ' incl. doubleheader' : '') : '—'} · ${homeTeam.abbreviation || 'Home'} ${homeWorkload ? homeWorkload.gamesInLast3Days + ' games' + (homeWorkload.doubleHeaderRecently ? ' incl. doubleheader' : '') : '—'}
+            </div>
+            ` : ''}
+
+            <div class="detail-block">
+              <div class="detail-title">Starting lineups</div>
+              ${lineup && lineup.lineupsPosted ? `
+                <div class="detail-cols">
+                  <div>${lineup.awayLineup.map((p, i) => `${i + 1}. ${p.name} (${p.position})`).join('<br>')}</div>
+                  <div>${lineup.homeLineup.map((p, i) => `${i + 1}. ${p.name} (${p.position})`).join('<br>')}</div>
+                </div>
+              ` : `Not posted yet — usually available 1-2 hours before first pitch.`}
+            </div>
+
+            ${(awayMoves && awayMoves.transactions.length) || (homeMoves && homeMoves.transactions.length) ? `
+            <div class="detail-block">
+              <div class="detail-title">Recent injured-list moves</div>
+              <div class="detail-cols">
+                <div>${awayMoves && awayMoves.transactions.length ? awayMoves.transactions.map(t => `${t.date}: ${t.description}`).join('<br>') : 'None in last 14 days'}</div>
+                <div>${homeMoves && homeMoves.transactions.length ? homeMoves.transactions.map(t => `${t.date}: ${t.description}`).join('<br>') : 'None in last 14 days'}</div>
+              </div>
+            </div>
+            ` : ''}
+          </div>
+        </details>
       </div>
     `;
 
@@ -778,6 +863,15 @@ async function renderMatchup(gamePk) {
       homeName: homeTeam.name,
       gameDate: game.gameDate
     };
+
+    el.querySelectorAll('.bet-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        el.querySelectorAll('.bet-tab').forEach(t => t.classList.remove('active'));
+        el.querySelectorAll('.bet-panel').forEach(p => p.style.display = 'none');
+        tab.classList.add('active');
+        document.getElementById(tab.dataset.panel).style.display = '';
+      });
+    });
 
     const awayInput = document.getElementById('awayOdds');
     const homeInput = document.getElementById('homeOdds');
