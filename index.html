@@ -94,6 +94,12 @@
   .probbar .away { background: var(--dirt); }
   .probbar .home { background: var(--field); }
   .probbar-nums { display: flex; justify-content: space-between; margin-top: 6px; font-weight: bold; font-size: 15px; }
+  .teamstats {
+    padding: 14px 18px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--ink-soft);
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  }
+  .teamstats .label { color: var(--ink); font-weight: bold; margin-bottom: 2px; }
+  .teamstats .stat-line { line-height: 1.6; }
   .pitchers {
     padding: 14px 18px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--ink-soft);
     display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
@@ -365,6 +371,20 @@ async function renderMatchup(gamePk) {
     const homePctDisplay = Math.round(homeWinProb * 100);
     const awayPctDisplay = 100 - homePctDisplay;
 
+    function statsBlock(rec, pyth) {
+      if (!rec) return 'No data';
+      const rs = rec.runsScored;
+      const ra = rec.runsAllowed;
+      const diff = rec.runDifferential;
+      const diffText = (diff === null || diff === undefined || isNaN(diff))
+        ? 'Run diff —'
+        : `Run diff ${diff > 0 ? '+' : ''}${diff} (${rs} RS / ${ra} RA)`;
+      const pythText = (pyth === null || pyth === undefined || isNaN(pyth))
+        ? 'Pyth win% —'
+        : `Pyth win% ${(pyth * 100).toFixed(1)}%`;
+      return `<div class="stat-line">${diffText}</div><div class="stat-line">${pythText}</div>`;
+    }
+
     el.innerHTML = `
       <div class="matchup">
         <div class="scoreboard">
@@ -388,6 +408,16 @@ async function renderMatchup(gamePk) {
             <div class="home" style="width:${homePctDisplay}%"></div>
           </div>
           <div class="probbar-nums"><span>${awayPctDisplay}%</span><span>${homePctDisplay}%</span></div>
+        </div>
+        <div class="teamstats">
+          <div>
+            <div class="label">${awayTeam.abbreviation || awayTeam.name}</div>
+            ${statsBlock(awayRec, awayPyth)}
+          </div>
+          <div>
+            <div class="label">${homeTeam.abbreviation || homeTeam.name}</div>
+            ${statsBlock(homeRec, homePyth)}
+          </div>
         </div>
         <div class="pitchers">
           <div>
