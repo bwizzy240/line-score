@@ -306,8 +306,8 @@
   }
   .bet-card .bet-actions button.won { border-color: var(--field); color: var(--field); }
   .bet-card .bet-actions button.lost { border-color: var(--neg); color: var(--neg); }
-  .bet-card.result-won { border-left: 4px solid var(--field); }
-  .bet-card.result-lost { border-left: 4px solid var(--neg); }
+  .bet-card.result-won { background: var(--pos-soft); border: 1.5px solid var(--field); border-left: 5px solid var(--field); }
+  .bet-card.result-lost { background: var(--neg-soft); border: 1.5px solid var(--neg); border-left: 5px solid var(--neg); }
   .bet-card .delete-bet { color: var(--ink-soft); font-size: 11px; text-decoration: underline; background: none; border: none; cursor: pointer; padding: 0; margin-top: 8px; }
   .parlay-section-title {
     padding: 16px 18px 6px; font-family: 'Arial Narrow', sans-serif; font-size: 14px;
@@ -1339,7 +1339,7 @@ function saveBets(bets) {
 
 function logBet(betType, side) {
   if (!currentMatchup) return;
-  let oddsStr, modelProb, label;
+  let oddsStr, modelProb, label, line = null;
 
   if (betType === 'moneyline') {
     if (!lastEdgeState) return;
@@ -1352,6 +1352,7 @@ function logBet(betType, side) {
     const isAway = side === 'away';
     oddsStr = isAway ? lastRunLineState.awayOddsStr : lastRunLineState.homeOddsStr;
     modelProb = isAway ? lastRunLineState.awayModelProb : lastRunLineState.homeModelProb;
+    line = lastRunLineState.lineVal;
     label = isAway
       ? `${currentMatchup.awayName} +${lastRunLineState.lineVal}`
       : `${currentMatchup.homeName} -${lastRunLineState.lineVal}`;
@@ -1360,6 +1361,7 @@ function logBet(betType, side) {
     const isOver = side === 'over';
     oddsStr = isOver ? lastTotalState.overOddsStr : lastTotalState.underOddsStr;
     modelProb = isOver ? lastTotalState.overModelProb : lastTotalState.underModelProb;
+    line = lastTotalState.totalVal;
     label = `${isOver ? 'Over' : 'Under'} ${lastTotalState.totalVal}`;
   } else {
     return;
@@ -1373,6 +1375,10 @@ function logBet(betType, side) {
     gamePk: currentMatchup.gamePk,
     matchup: `${currentMatchup.awayAbbr} @ ${currentMatchup.homeAbbr}`,
     betType,
+    side, // 'away' | 'home' | 'over' | 'under' — used for auto-grading
+    line, // numeric line for runline/total, null for moneyline
+    awayAbbr: currentMatchup.awayAbbr,
+    homeAbbr: currentMatchup.homeAbbr,
     team: label,
     abbr: label,
     odds: oddsStr,
@@ -1405,11 +1411,89 @@ function deleteBet(id) {
   renderBetsView();
 }
 
+function gradeSinglePick(pick, game) {
+  if (!game || !game.status || game.status.abstractGameState !== 'Final') return null;
+  const homeScore = game.teams.home.score;
+  const awayScore = game.teams.away.score;
+  if (homeScore == null || awayScore == null) return null;
+
+  if (pick.betType === 'moneyline' || pick.betType === 'ML') {
+    if (pick.side === 'home') return homeScore > awayScore;
+    if (pick.side === 'away') return awayScore > homeScore;
+    return null;
+  }
+  if (pick.betType === 'runline' || pick.betType === 'RL') {
+    if (pick.line == null) return null;
+    const homeMargin = homeScore - awayScore;
+    if (pick.side === 'home') return homeMargin > pick.line;
+    if (pick.side === 'away') return homeMargin < pick.line;
+    return null;
+  }
+  if (pick.betType === 'total' || pick.betType === 'TOT') {
+    if (pick.line == null) return null;
+    const total = homeScore + awayScore;
+    if (pick.side === 'over') return total > pick.line;
+    if (pick.side === 'under') return total < pick.line;
+    return null;
+  }
+  return null;
+}
+
+async function autoGradeBets() {
+  const bets = loadBets();
+  const pending = bets.filter(b => b.result !== 'won' && b.result !== 'lost');
+  if (!pending.length) return false;
+
+  const dateSet = new Set();
+  pending.forEach(b => {
+    if (b.legs) {
+      b.legs.forEach(l => { if (l.gameDate) dateSet.add(fmtDate(new Date(l.gameDate))); });
+    } else if (b.gameDate) {
+      dateSet.add(fmtDate(new Date(b.gameDate)));
+    }
+  });
+  if (!dateSet.size) return false;
+
+  const gameLookup = new Map();
+  for (const dateStr of dateSet) {
+    try {
+      const data = await fetchJSON(`/api/schedule?date=${dateStr}`);
+      const dates = data.dates || [];
+      const games = dates.length ? dates[0].games : [];
+      games.forEach(g => gameLookup.set(String(g.gamePk), g));
+    } catch (e) { /* skip this date on failure, try again next time */ }
+  }
+
+  let changed = false;
+  pending.forEach(b => {
+    if (b.legs) {
+      // Parlay: any confirmed loss settles it immediately; otherwise all legs must be decided wins.
+      let anyLost = false;
+      let allDecided = true;
+      for (const l of b.legs) {
+        const outcome = gradeSinglePick(l, gameLookup.get(String(l.gamePk)));
+        if (outcome === false) { anyLost = true; break; }
+        if (outcome === null) allDecided = false;
+      }
+      if (anyLost) { b.result = 'lost'; changed = true; }
+      else if (allDecided) { b.result = 'won'; changed = true; }
+    } else {
+      const outcome = gradeSinglePick(b, gameLookup.get(String(b.gamePk)));
+      if (outcome === true) { b.result = 'won'; changed = true; }
+      else if (outcome === false) { b.result = 'lost'; changed = true; }
+    }
+  });
+
+  if (changed) saveBets(bets);
+  return changed;
+}
+
 function renderBetsView() {
   const view = document.getElementById('betsView');
   const bets = loadBets();
 
   const decided = bets.filter(b => b.result === 'won' || b.result === 'lost');
+  const pending = bets.filter(b => b.result !== 'won' && b.result !== 'lost');
   const wins = decided.filter(b => b.result === 'won').length;
   const record = decided.length ? `${wins}-${decided.length - wins}` : '—';
 
@@ -1418,6 +1502,22 @@ function renderBetsView() {
     const avgModelProb = decided.reduce((sum, b) => sum + b.modelProb, 0) / decided.length;
     const actualRate = wins / decided.length;
     calibrationText = `${(avgModelProb * 100).toFixed(0)}% vs ${(actualRate * 100).toFixed(0)}%`;
+  }
+
+  function betCardHTML(b) {
+    const resultClass = b.result === 'won' ? 'result-won' : (b.result === 'lost' ? 'result-lost' : '');
+    return `
+      <div class="bet-card ${resultClass}">
+        <div class="bet-top"><span>${b.abbr} · ${b.matchup}</span><span>${b.odds}</span></div>
+        ${b.legs ? `<div class="bet-meta">${b.legs.map(l => `${l.label} (${(l.prob * 100).toFixed(0)}%)`).join(' + ')}</div>` : ''}
+        <div class="bet-meta">Model had it at ${(b.modelProb * 100).toFixed(1)}% · logged ${new Date(b.loggedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+        <div class="bet-actions">
+          <button class="won" onclick="setBetResult('${b.id}','won')">${b.result === 'won' ? '✓ Won' : 'Won'}</button>
+          <button class="lost" onclick="setBetResult('${b.id}','lost')">${b.result === 'lost' ? '✓ Lost' : 'Lost'}</button>
+        </div>
+        <button class="delete-bet" onclick="deleteBet('${b.id}')">Remove</button>
+      </div>
+    `;
   }
 
   let html = `
@@ -1431,21 +1531,14 @@ function renderBetsView() {
   if (!bets.length) {
     html += `<div class="status">No bets logged yet. Tap "Log bet" next to an odds comparison on a game to start tracking.</div>`;
   } else {
-    bets.forEach(b => {
-      const resultClass = b.result === 'won' ? 'result-won' : (b.result === 'lost' ? 'result-lost' : '');
-      html += `
-        <div class="bet-card ${resultClass}">
-          <div class="bet-top"><span>${b.abbr} · ${b.matchup}</span><span>${b.odds}</span></div>
-          ${b.legs ? `<div class="bet-meta">${b.legs.map(l => `${l.label} (${(l.prob * 100).toFixed(0)}%)`).join(' + ')}</div>` : ''}
-          <div class="bet-meta">Model had it at ${(b.modelProb * 100).toFixed(1)}% · logged ${new Date(b.loggedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
-          <div class="bet-actions">
-            <button class="won" onclick="setBetResult('${b.id}','won')">${b.result === 'won' ? '✓ Won' : 'Won'}</button>
-            <button class="lost" onclick="setBetResult('${b.id}','lost')">${b.result === 'lost' ? '✓ Lost' : 'Lost'}</button>
-          </div>
-          <button class="delete-bet" onclick="deleteBet('${b.id}')">Remove</button>
-        </div>
-      `;
-    });
+    if (pending.length) {
+      html += `<div class="parlay-section-title">Pending</div>`;
+      html += pending.map(betCardHTML).join('');
+    }
+    html += `<div class="parlay-section-title">History${decided.length ? ` (${record})` : ''}</div>`;
+    html += decided.length
+      ? decided.map(betCardHTML).join('')
+      : `<div class="status">No settled bets yet — mark a pending bet Won or Lost once its game finishes.</div>`;
   }
 
   view.innerHTML = html;
@@ -1509,13 +1602,17 @@ async function loadParlayFinder() {
       if (!awayRec || !homeRec) return;
 
       const matchupLabel = `${awayTeam.abbreviation || 'AWAY'} @ ${homeTeam.abbreviation || 'HOME'}`;
+      const legBase = {
+        gamePk: g.gamePk, matchup: matchupLabel, gameDate: g.gameDate,
+        awayAbbr: awayTeam.abbreviation, homeAbbr: homeTeam.abbreviation
+      };
 
       // Moneyline: take whichever side is favored
       const { homeWinProb, awayWinProb } = computeBaseWinProb(awayRec, homeRec);
       if (homeWinProb >= awayWinProb) {
-        legs.push({ gamePk: g.gamePk, matchup: matchupLabel, betType: 'ML', label: `${homeTeam.abbreviation} ML`, prob: homeWinProb });
+        legs.push({ ...legBase, betType: 'ML', side: 'home', label: `${homeTeam.abbreviation} ML`, prob: homeWinProb });
       } else {
-        legs.push({ gamePk: g.gamePk, matchup: matchupLabel, betType: 'ML', label: `${awayTeam.abbreviation} ML`, prob: awayWinProb });
+        legs.push({ ...legBase, betType: 'ML', side: 'away', label: `${awayTeam.abbreviation} ML`, prob: awayWinProb });
       }
 
       // Run line & total, using park factor (free, no extra fetch) but skipping weather/fatigue/pitcher detail
@@ -1526,9 +1623,9 @@ async function loadParlayFinder() {
         const rlProbs = runLineProbs(projection, 1.5);
         if (rlProbs) {
           if (rlProbs.home >= rlProbs.away) {
-            legs.push({ gamePk: g.gamePk, matchup: matchupLabel, betType: 'RL', label: `${homeTeam.abbreviation} -1.5`, prob: rlProbs.home });
+            legs.push({ ...legBase, betType: 'RL', side: 'home', line: 1.5, label: `${homeTeam.abbreviation} -1.5`, prob: rlProbs.home });
           } else {
-            legs.push({ gamePk: g.gamePk, matchup: matchupLabel, betType: 'RL', label: `${awayTeam.abbreviation} +1.5`, prob: rlProbs.away });
+            legs.push({ ...legBase, betType: 'RL', side: 'away', line: 1.5, label: `${awayTeam.abbreviation} +1.5`, prob: rlProbs.away });
           }
         }
 
@@ -1536,9 +1633,9 @@ async function loadParlayFinder() {
         const totProbs = totalProbs(projection, totalLine);
         if (totProbs) {
           if (totProbs.over >= totProbs.under) {
-            legs.push({ gamePk: g.gamePk, matchup: matchupLabel, betType: 'TOT', label: `Over ${totalLine}`, prob: totProbs.over });
+            legs.push({ ...legBase, betType: 'TOT', side: 'over', line: totalLine, label: `Over ${totalLine}`, prob: totProbs.over });
           } else {
-            legs.push({ gamePk: g.gamePk, matchup: matchupLabel, betType: 'TOT', label: `Under ${totalLine}`, prob: totProbs.under });
+            legs.push({ ...legBase, betType: 'TOT', side: 'under', line: totalLine, label: `Under ${totalLine}`, prob: totProbs.under });
           }
         }
       }
@@ -1633,7 +1730,10 @@ function showTab(tabName) {
     document.getElementById(views[key]).style.display = key === tabName ? '' : 'none';
   });
   document.getElementById('datebarEl').style.display = tabName === 'games' ? '' : 'none';
-  if (tabName === 'bets') renderBetsView();
+  if (tabName === 'bets') {
+    renderBetsView();
+    autoGradeBets().then(changed => { if (changed) renderBetsView(); });
+  }
   if (tabName === 'parlays') loadParlayFinder();
 }
 
