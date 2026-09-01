@@ -94,12 +94,6 @@
   .probbar .away { background: var(--dirt); }
   .probbar .home { background: var(--field); }
   .probbar-nums { display: flex; justify-content: space-between; margin-top: 6px; font-weight: bold; font-size: 15px; }
-  .teamstats {
-    padding: 14px 18px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--ink-soft);
-    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-  }
-  .teamstats .label { color: var(--ink); font-weight: bold; margin-bottom: 2px; }
-  .teamstats .stat-line { line-height: 1.6; }
   .pitchers {
     padding: 14px 18px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--ink-soft);
     display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
@@ -138,6 +132,44 @@
     background: #FBEEEC; border: 1px solid var(--neg); color: var(--neg);
     padding: 14px; border-radius: 3px; font-size: 13px; margin-bottom: 16px;
   }
+  .tabbar {
+    display: flex; background: var(--field-dark); border-bottom: 1px solid #375943;
+  }
+  .tab {
+    flex: 1; background: none; border: none; color: #9FB6A6; font-family: inherit;
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; padding: 12px;
+    cursor: pointer;
+  }
+  .tab.active { color: var(--chalk); border-bottom: 2px solid var(--amber); }
+  .log-bet-btn {
+    margin-top: 8px; width: 100%; padding: 8px; background: none;
+    border: 1px dashed var(--ink-soft); border-radius: 3px; color: var(--ink-soft);
+    font-family: inherit; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px;
+    cursor: pointer;
+  }
+  .log-bet-btn:active { background: var(--chalk); }
+  .bets-summary {
+    background: var(--field); color: var(--chalk); padding: 16px 18px;
+    display: flex; justify-content: space-around; text-align: center;
+  }
+  .bets-summary .stat-num { font-size: 20px; font-weight: bold; }
+  .bets-summary .stat-label { font-size: 10px; color: #C9D9CB; text-transform: uppercase; margin-top: 2px; }
+  .bet-card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 3px;
+    padding: 12px 14px; margin: 10px 16px; font-size: 13px;
+  }
+  .bet-card .bet-top { display: flex; justify-content: space-between; font-weight: bold; }
+  .bet-card .bet-meta { color: var(--ink-soft); font-size: 11px; margin-top: 4px; }
+  .bet-card .bet-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .bet-card .bet-actions button {
+    flex: 1; padding: 7px; font-family: inherit; font-size: 11px; text-transform: uppercase;
+    border-radius: 3px; border: 1px solid var(--line); background: var(--chalk); cursor: pointer;
+  }
+  .bet-card .bet-actions button.won { border-color: var(--field); color: var(--field); }
+  .bet-card .bet-actions button.lost { border-color: var(--neg); color: var(--neg); }
+  .bet-card.result-won { border-left: 4px solid var(--field); }
+  .bet-card.result-lost { border-left: 4px solid var(--neg); }
+  .bet-card .delete-bet { color: var(--ink-soft); font-size: 11px; text-decoration: underline; background: none; border: none; cursor: pointer; padding: 0; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -147,19 +179,27 @@
   <p>Pulls live MLB team &amp; pitcher data to estimate a win probability for each matchup, then compares it against odds you enter.</p>
 </header>
 
-<div class="datebar">
+<div class="tabbar">
+  <button id="tabGames" class="tab active">Games</button>
+  <button id="tabBets" class="tab">My Bets</button>
+</div>
+
+<div class="datebar" id="datebarEl">
   <button id="prevDay">‹</button>
   <span id="dateLabel">Loading…</span>
   <button id="nextDay">›</button>
 </div>
 
 <main>
-  <div id="gamesContainer" class="status">Loading today's games…</div>
-  <div id="matchupContainer"></div>
+  <div id="gamesView">
+    <div id="gamesContainer" class="status">Loading today's games…</div>
+    <div id="matchupContainer"></div>
+  </div>
+  <div id="betsView" style="display:none;"></div>
 </main>
 
 <footer>
-  Model blends run differential (Pythagorean win expectation), season record, home/away-specific record, recent form, and starting pitcher ERA — it is not a guarantee and doesn't account for everything a sportsbook prices in (weather, bullpen usage, lineup changes, injuries not yet reflected in stats, etc). Run line and total estimates use a Poisson model built from season scoring rates, which is a simplification and doesn't include park factors or bullpen-specific data. Use it as one input, not the whole decision. Bet only what you can afford to lose.
+  Model blends run differential (Pythagorean win expectation), season record, home/away-specific record, recent form, and starting pitcher ERA — it is not a guarantee and doesn't account for everything a sportsbook prices in (weather, bullpen usage, lineup changes, injuries not yet reflected in stats, etc). Use it as one input, not the whole decision. Bet only what you can afford to lose.
 </footer>
 
 <script>
@@ -267,7 +307,22 @@ async function getPitcherERA(pitcherId, season) {
     const splits = data.stats && data.stats[0] && data.stats[0].splits;
     if (splits && splits.length) {
       const s = splits[0].stat;
-      return { era: parseFloat(s.era), ip: parseFloat(s.inningsPitched), whip: parseFloat(s.whip) };
+      const ip = parseFloat(s.inningsPitched);
+      const hr = Number(s.homeRuns);
+      const bb = Number(s.baseOnBalls);
+      const hbp = Number(s.hitByPitch);
+      const k = Number(s.strikeOuts);
+      let fip = null;
+      // FIP constant of 3.10 approximates league-average ERA; a reasonable fixed constant for this purpose.
+      if (ip > 0 && !isNaN(hr) && !isNaN(bb) && !isNaN(k)) {
+        fip = ((13 * hr + 3 * (bb + (hbp || 0)) - 2 * k) / ip) + 3.10;
+      }
+      return {
+        era: parseFloat(s.era),
+        ip,
+        whip: parseFloat(s.whip),
+        fip
+      };
     }
   } catch (e) {}
   return null;
@@ -326,106 +381,6 @@ function last10Pct(rec) {
   return l10.wins / total;
 }
 
-// ---- Run-line / totals model (Poisson) ----
-
-function runsPerGame(rec) {
-  if (!rec) return null;
-  const gp = (rec.wins ?? 0) + (rec.losses ?? 0);
-  if (!gp || rec.runsScored == null) return null;
-  return rec.runsScored / gp;
-}
-
-function runsAllowedPerGame(rec) {
-  if (!rec) return null;
-  const gp = (rec.wins ?? 0) + (rec.losses ?? 0);
-  if (!gp || rec.runsAllowed == null) return null;
-  return rec.runsAllowed / gp;
-}
-
-function logFactorial(n) {
-  let r = 0;
-  for (let i = 2; i <= n; i++) r += Math.log(i);
-  return r;
-}
-
-function poissonPMF(k, lambda) {
-  if (lambda <= 0) return k === 0 ? 1 : 0;
-  return Math.exp(-lambda + k * Math.log(lambda) - logFactorial(k));
-}
-
-function runDistribution(lambdaHome, lambdaAway, maxRuns = 18) {
-  const marginProbs = {};
-  const totalProbs = {};
-  for (let h = 0; h <= maxRuns; h++) {
-    const ph = poissonPMF(h, lambdaHome);
-    for (let a = 0; a <= maxRuns; a++) {
-      const pa = poissonPMF(a, lambdaAway);
-      const p = ph * pa;
-      const margin = h - a;
-      const total = h + a;
-      marginProbs[margin] = (marginProbs[margin] || 0) + p;
-      totalProbs[total] = (totalProbs[total] || 0) + p;
-    }
-  }
-  return { marginProbs, totalProbs };
-}
-
-function marginProbAtLeast(marginProbs, threshold) {
-  let p = 0;
-  for (const m in marginProbs) if (Number(m) >= threshold) p += marginProbs[m];
-  return p;
-}
-
-function marginProbAtMost(marginProbs, threshold) {
-  let p = 0;
-  for (const m in marginProbs) if (Number(m) <= threshold) p += marginProbs[m];
-  return p;
-}
-
-function totalOverProb(totalProbs, line) {
-  let p = 0;
-  for (const t in totalProbs) if (Number(t) > line) p += totalProbs[t];
-  return p;
-}
-
-function americanToImplied(odds) {
-  const n = parseFloat(odds);
-  if (isNaN(n) || n === 0) return null;
-  if (n > 0) return 100 / (n + 100);
-  return -n / (-n + 100);
-}
-
-function edgeColHTML(abbr, implied, modelProb) {
-  if (implied === null) return `<div class="col"><div class="team-abbr">${abbr}</div><div class="implied">—</div></div>`;
-  const edge = (modelProb - implied) * 100;
-  const edgeClass = edge > 0 ? 'edge-pos' : (edge < 0 ? 'edge-neg' : '');
-  const edgeText = edge > 0 ? `+${edge.toFixed(1)}% model edge` : `${edge.toFixed(1)}% vs model`;
-  const edgeSpanClass = edge > 0 ? 'pos' : 'neg';
-  return `<div class="col ${edgeClass}"><div class="team-abbr">${abbr}</div><div class="implied">${(implied * 100).toFixed(1)}%</div><div class="edge ${edgeSpanClass}">${edgeText}</div></div>`;
-}
-
-function computeRunLineEdge(favOddsStr, dogOddsStr, favProb, dogProb, favAbbr, dogAbbr) {
-  const box = document.getElementById('runlineResultBox');
-  if (!box) return;
-  const favImplied = americanToImplied(favOddsStr);
-  const dogImplied = americanToImplied(dogOddsStr);
-  if (favImplied === null && dogImplied === null) { box.innerHTML = ''; return; }
-  box.innerHTML = `<div class="result">${edgeColHTML(favAbbr, favImplied, favProb)}${edgeColHTML(dogAbbr, dogImplied, dogProb)}</div>`;
-}
-
-function computeTotalEdge(lineStr, overOddsStr, underOddsStr, dist) {
-  const box = document.getElementById('totalResultBox');
-  if (!box || !dist) return;
-  const line = parseFloat(lineStr);
-  if (isNaN(line)) { box.innerHTML = ''; return; }
-  const overProb = totalOverProb(dist.totalProbs, line);
-  const underProb = 1 - overProb;
-  const overImplied = americanToImplied(overOddsStr);
-  const underImplied = americanToImplied(underOddsStr);
-  if (overImplied === null && underImplied === null) { box.innerHTML = ''; return; }
-  box.innerHTML = `<div class="result">${edgeColHTML('OVER', overImplied, overProb)}${edgeColHTML('UNDER', underImplied, underProb)}</div>`;
-}
-
 async function renderMatchup(gamePk) {
   const el = document.getElementById('matchupContainer');
   el.innerHTML = '<div class="status">Crunching numbers…</div>';
@@ -462,7 +417,9 @@ async function renderMatchup(gamePk) {
     let homeWinProb = log5(homePct, awayPct);
 
     if (awayERA && homeERA && awayERA.ip > 15 && homeERA.ip > 15) {
-      const diff = awayERA.era - homeERA.era;
+      const awayVal = awayERA.fip ?? awayERA.era;
+      const homeVal = homeERA.fip ?? homeERA.era;
+      const diff = awayVal - homeVal;
       const shift = Math.max(-0.08, Math.min(0.08, diff * 0.025));
       homeWinProb = Math.min(0.95, Math.max(0.05, homeWinProb + shift));
     }
@@ -470,44 +427,6 @@ async function renderMatchup(gamePk) {
     const awayWinProb = 1 - homeWinProb;
     const homePctDisplay = Math.round(homeWinProb * 100);
     const awayPctDisplay = 100 - homePctDisplay;
-
-    // Run-line / totals model
-    const homeRPG = runsPerGame(homeRec);
-    const awayRPG = runsPerGame(awayRec);
-    const homeRAPG = runsAllowedPerGame(homeRec);
-    const awayRAPG = runsAllowedPerGame(awayRec);
-
-    let dist = null, lambdaHome = null, lambdaAway = null;
-    if (homeRPG != null && awayRPG != null && homeRAPG != null && awayRAPG != null) {
-      lambdaHome = (homeRPG + awayRAPG) / 2 + 0.15; // small home-field run bump
-      lambdaAway = (awayRPG + homeRAPG) / 2;
-      dist = runDistribution(lambdaHome, lambdaAway);
-    }
-
-    const homeFavored = homeWinProb >= awayWinProb;
-    const favTeam = homeFavored ? homeTeam : awayTeam;
-    const dogTeam = homeFavored ? awayTeam : homeTeam;
-    let favCoverProb = null, dogCoverProb = null;
-    if (dist) {
-      favCoverProb = homeFavored
-        ? marginProbAtLeast(dist.marginProbs, 2)
-        : marginProbAtMost(dist.marginProbs, -2);
-      dogCoverProb = 1 - favCoverProb;
-    }
-
-    function statsBlock(rec, pyth) {
-      if (!rec) return 'No data';
-      const rs = rec.runsScored;
-      const ra = rec.runsAllowed;
-      const diff = rec.runDifferential;
-      const diffText = (diff === null || diff === undefined || isNaN(diff))
-        ? 'Run diff —'
-        : `Run diff ${diff > 0 ? '+' : ''}${diff} (${rs} RS / ${ra} RA)`;
-      const pythText = (pyth === null || pyth === undefined || isNaN(pyth))
-        ? 'Pyth win% —'
-        : `Pyth win% ${(pyth * 100).toFixed(1)}%`;
-      return `<div class="stat-line">${diffText}</div><div class="stat-line">${pythText}</div>`;
-    }
 
     el.innerHTML = `
       <div class="matchup">
@@ -533,24 +452,14 @@ async function renderMatchup(gamePk) {
           </div>
           <div class="probbar-nums"><span>${awayPctDisplay}%</span><span>${homePctDisplay}%</span></div>
         </div>
-        <div class="teamstats">
-          <div>
-            <div class="label">${awayTeam.abbreviation || awayTeam.name}</div>
-            ${statsBlock(awayRec, awayPyth)}
-          </div>
-          <div>
-            <div class="label">${homeTeam.abbreviation || homeTeam.name}</div>
-            ${statsBlock(homeRec, homePyth)}
-          </div>
-        </div>
         <div class="pitchers">
           <div>
             <div class="label">${awayPitcher ? awayPitcher.fullName : 'TBD'}</div>
-            ${awayERA ? `ERA ${awayERA.era.toFixed(2)} · WHIP ${awayERA.whip}` : 'No stats yet'}
+            ${awayERA ? `ERA ${awayERA.era.toFixed(2)}${awayERA.fip !== null ? ` · FIP ${awayERA.fip.toFixed(2)}` : ''}` : 'No stats yet'}
           </div>
           <div>
             <div class="label">${homePitcher ? homePitcher.fullName : 'TBD'}</div>
-            ${homeERA ? `ERA ${homeERA.era.toFixed(2)} · WHIP ${homeERA.whip}` : 'No stats yet'}
+            ${homeERA ? `ERA ${homeERA.era.toFixed(2)}${homeERA.fip !== null ? ` · FIP ${homeERA.fip.toFixed(2)}` : ''}` : 'No stats yet'}
           </div>
         </div>
         <div class="odds-section">
@@ -562,34 +471,17 @@ async function renderMatchup(gamePk) {
           </div>
           <div id="resultBox"></div>
         </div>
-        <div class="odds-section" style="border-top:1px solid var(--line);">
-          <h3>Run Line (±1.5)</h3>
-          <p class="hint">Favorite: <strong>${favTeam.abbreviation || favTeam.name}</strong> -1.5 · Underdog: <strong>${dogTeam.abbreviation || dogTeam.name}</strong> +1.5${dist ? ` — model gives the favorite a ${(favCoverProb * 100).toFixed(1)}% chance to cover.` : ' — not enough scoring data yet to model this.'}</p>
-          ${dist ? `
-          <div class="odds-row">
-            <div class="odds-field"><label>${favTeam.abbreviation || 'Fav'} -1.5 odds</label><input type="text" id="favRLOdds" placeholder="e.g. +130"></div>
-            <div class="odds-field"><label>${dogTeam.abbreviation || 'Dog'} +1.5 odds</label><input type="text" id="dogRLOdds" placeholder="e.g. -150"></div>
-          </div>
-          <div id="runlineResultBox"></div>
-          ` : ''}
-        </div>
-        <div class="odds-section" style="border-top:1px solid var(--line);">
-          <h3>Total Runs (Over/Under)</h3>
-          <p class="hint">${dist ? `Model expected total: <strong>${(lambdaHome + lambdaAway).toFixed(1)} runs</strong>. Enter the total line and odds from your book.` : 'Not enough scoring data yet to model this.'}</p>
-          ${dist ? `
-          <div class="odds-row">
-            <div class="odds-field"><label>Total line</label><input type="text" id="totalLine" placeholder="e.g. 8.5"></div>
-            <div class="odds-field"></div>
-          </div>
-          <div class="odds-row">
-            <div class="odds-field"><label>Over odds</label><input type="text" id="overOdds" placeholder="e.g. -110"></div>
-            <div class="odds-field"><label>Under odds</label><input type="text" id="underOdds" placeholder="e.g. -110"></div>
-          </div>
-          <div id="totalResultBox"></div>
-          ` : ''}
-        </div>
       </div>
     `;
+
+    currentMatchup = {
+      gamePk,
+      awayAbbr: awayTeam.abbreviation || 'AWAY',
+      homeAbbr: homeTeam.abbreviation || 'HOME',
+      awayName: awayTeam.name,
+      homeName: homeTeam.name,
+      gameDate: game.gameDate
+    };
 
     const awayInput = document.getElementById('awayOdds');
     const homeInput = document.getElementById('homeOdds');
@@ -597,35 +489,40 @@ async function renderMatchup(gamePk) {
     awayInput.addEventListener('input', compute);
     homeInput.addEventListener('input', compute);
 
-    const favOddsInput = document.getElementById('favRLOdds');
-    const dogOddsInput = document.getElementById('dogRLOdds');
-    if (favOddsInput && dogOddsInput) {
-      const computeRL = () => computeRunLineEdge(favOddsInput.value, dogOddsInput.value, favCoverProb, dogCoverProb, favTeam.abbreviation || 'FAV', dogTeam.abbreviation || 'DOG');
-      favOddsInput.addEventListener('input', computeRL);
-      dogOddsInput.addEventListener('input', computeRL);
-    }
-
-    const totalLineInput = document.getElementById('totalLine');
-    const overOddsInput = document.getElementById('overOdds');
-    const underOddsInput = document.getElementById('underOdds');
-    if (totalLineInput && overOddsInput && underOddsInput) {
-      const computeTotal = () => computeTotalEdge(totalLineInput.value, overOddsInput.value, underOddsInput.value, dist);
-      totalLineInput.addEventListener('input', computeTotal);
-      overOddsInput.addEventListener('input', computeTotal);
-      underOddsInput.addEventListener('input', computeTotal);
-    }
-
   } catch (err) {
     el.innerHTML = `<div class="error-box">Couldn't compute this matchup: ${err.message}</div>`;
   }
+}
+
+function americanToImplied(odds) {
+  const n = parseFloat(odds);
+  if (isNaN(n) || n === 0) return null;
+  if (n > 0) return 100 / (n + 100);
+  return -n / (-n + 100);
 }
 
 function computeEdge(awayOddsStr, homeOddsStr, awayModelProb, homeModelProb, awayAbbr, homeAbbr) {
   const box = document.getElementById('resultBox');
   const awayImplied = americanToImplied(awayOddsStr);
   const homeImplied = americanToImplied(homeOddsStr);
+  lastEdgeState = { awayAbbr, homeAbbr, awayOddsStr, homeOddsStr, awayImplied, homeImplied, awayModelProb, homeModelProb };
   if (awayImplied === null && homeImplied === null) { box.innerHTML = ''; return; }
-  box.innerHTML = `<div class="result">${edgeColHTML(awayAbbr, awayImplied, awayModelProb)}${edgeColHTML(homeAbbr, homeImplied, homeModelProb)}</div>`;
+
+  function colHTML(abbr, implied, modelProb, side) {
+    if (implied === null) return `<div class="col"><div class="team-abbr">${abbr}</div><div class="implied">—</div></div>`;
+    const edge = (modelProb - implied) * 100;
+    const edgeClass = edge > 0 ? 'edge-pos' : (edge < 0 ? 'edge-neg' : '');
+    const edgeText = edge > 0 ? `+${edge.toFixed(1)}% model edge` : `${edge.toFixed(1)}% vs model`;
+    const edgeSpanClass = edge > 0 ? 'pos' : 'neg';
+    return `<div class="col ${edgeClass}">
+      <div class="team-abbr">${abbr}</div>
+      <div class="implied">${(implied * 100).toFixed(1)}%</div>
+      <div class="edge ${edgeSpanClass}">${edgeText}</div>
+      <button class="log-bet-btn" onclick="logBet('${side}')">Log bet</button>
+    </div>`;
+  }
+
+  box.innerHTML = `<div class="result">${colHTML(awayAbbr, awayImplied, awayModelProb, 'away')}${colHTML(homeAbbr, homeImplied, homeModelProb, 'home')}</div>`;
 }
 
 document.getElementById('prevDay').addEventListener('click', () => {
@@ -671,6 +568,126 @@ async function refreshLiveScores() {
 }
 
 setInterval(refreshLiveScores, 30000);
+
+// ---- Bet tracking ----
+let currentMatchup = null;
+let lastEdgeState = null;
+
+const BETS_KEY = 'lineScoreBets';
+function loadBets() {
+  try { return JSON.parse(localStorage.getItem(BETS_KEY)) || []; }
+  catch (e) { return []; }
+}
+function saveBets(bets) {
+  localStorage.setItem(BETS_KEY, JSON.stringify(bets));
+}
+
+function logBet(side) {
+  if (!currentMatchup || !lastEdgeState) return;
+  const isAway = side === 'away';
+  const oddsStr = isAway ? lastEdgeState.awayOddsStr : lastEdgeState.homeOddsStr;
+  const modelProb = isAway ? lastEdgeState.awayModelProb : lastEdgeState.homeModelProb;
+  const teamName = isAway ? currentMatchup.awayName : currentMatchup.homeName;
+  const abbr = isAway ? currentMatchup.awayAbbr : currentMatchup.homeAbbr;
+
+  if (!oddsStr) return;
+
+  const bets = loadBets();
+  bets.unshift({
+    id: `${currentMatchup.gamePk}-${side}-${Date.now()}`,
+    gamePk: currentMatchup.gamePk,
+    matchup: `${currentMatchup.awayAbbr} @ ${currentMatchup.homeAbbr}`,
+    team: teamName,
+    abbr,
+    odds: oddsStr,
+    modelProb,
+    loggedAt: new Date().toISOString(),
+    gameDate: currentMatchup.gameDate,
+    result: null
+  });
+  saveBets(bets);
+
+  const box = document.getElementById('resultBox');
+  const note = document.createElement('div');
+  note.style.cssText = 'text-align:center;font-size:12px;color:var(--field);margin-top:8px;';
+  note.textContent = `Logged: ${abbr} at ${oddsStr}`;
+  box.appendChild(note);
+}
+
+function setBetResult(id, result) {
+  const bets = loadBets();
+  const bet = bets.find(b => b.id === id);
+  if (bet) bet.result = result;
+  saveBets(bets);
+  renderBetsView();
+}
+
+function deleteBet(id) {
+  const bets = loadBets().filter(b => b.id !== id);
+  saveBets(bets);
+  renderBetsView();
+}
+
+function renderBetsView() {
+  const view = document.getElementById('betsView');
+  const bets = loadBets();
+
+  const decided = bets.filter(b => b.result === 'won' || b.result === 'lost');
+  const wins = decided.filter(b => b.result === 'won').length;
+  const record = decided.length ? `${wins}-${decided.length - wins}` : '—';
+
+  let calibrationText = '—';
+  if (decided.length >= 3) {
+    const avgModelProb = decided.reduce((sum, b) => sum + b.modelProb, 0) / decided.length;
+    const actualRate = wins / decided.length;
+    calibrationText = `${(avgModelProb * 100).toFixed(0)}% vs ${(actualRate * 100).toFixed(0)}%`;
+  }
+
+  let html = `
+    <div class="bets-summary">
+      <div><div class="stat-num">${bets.length}</div><div class="stat-label">Logged</div></div>
+      <div><div class="stat-num">${record}</div><div class="stat-label">Record</div></div>
+      <div><div class="stat-num">${calibrationText}</div><div class="stat-label">Model % vs Actual</div></div>
+    </div>
+  `;
+
+  if (!bets.length) {
+    html += `<div class="status">No bets logged yet. Tap "Log bet" next to an odds comparison on a game to start tracking.</div>`;
+  } else {
+    bets.forEach(b => {
+      const resultClass = b.result === 'won' ? 'result-won' : (b.result === 'lost' ? 'result-lost' : '');
+      html += `
+        <div class="bet-card ${resultClass}">
+          <div class="bet-top"><span>${b.abbr} · ${b.matchup}</span><span>${b.odds}</span></div>
+          <div class="bet-meta">Model had it at ${(b.modelProb * 100).toFixed(1)}% · logged ${new Date(b.loggedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+          <div class="bet-actions">
+            <button class="won" onclick="setBetResult('${b.id}','won')">${b.result === 'won' ? '✓ Won' : 'Won'}</button>
+            <button class="lost" onclick="setBetResult('${b.id}','lost')">${b.result === 'lost' ? '✓ Lost' : 'Lost'}</button>
+          </div>
+          <button class="delete-bet" onclick="deleteBet('${b.id}')">Remove</button>
+        </div>
+      `;
+    });
+  }
+
+  view.innerHTML = html;
+}
+
+document.getElementById('tabGames').addEventListener('click', () => {
+  document.getElementById('tabGames').classList.add('active');
+  document.getElementById('tabBets').classList.remove('active');
+  document.getElementById('gamesView').style.display = '';
+  document.getElementById('datebarEl').style.display = '';
+  document.getElementById('betsView').style.display = 'none';
+});
+document.getElementById('tabBets').addEventListener('click', () => {
+  document.getElementById('tabBets').classList.add('active');
+  document.getElementById('tabGames').classList.remove('active');
+  document.getElementById('betsView').style.display = '';
+  document.getElementById('datebarEl').style.display = 'none';
+  document.getElementById('gamesView').style.display = 'none';
+  renderBetsView();
+});
 
 loadGames();
 </script>
