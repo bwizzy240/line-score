@@ -892,6 +892,13 @@ async function renderMatchup(gamePk) {
 
     const defaultTotal = projection ? (Math.round(projection.expectedTotal * 2) / 2).toFixed(1) : '';
 
+    // Default the run line input to whatever Kalshi actually has for this game, not a fixed
+    // guess of 1.5 — so blending applies automatically without needing the button first.
+    let defaultRunLine = 1.5;
+    if (kalshiRL && kalshiRL.available && kalshiRL.lines.length) {
+      defaultRunLine = kalshiRL.lines[0].line;
+    }
+
     el.innerHTML = `
       <div class="matchup">
         <div class="scoreboard">
@@ -937,16 +944,16 @@ async function renderMatchup(gamePk) {
         </div>
 
         <div class="bet-panel" id="panel-runline" style="display:none;">
-          <p class="plain-hint">Pick who wins by more than the line (usually ±1.5 runs). ${projection ? `We project the score around ${projection.expectedHomeRuns.toFixed(1)} - ${projection.expectedAwayRuns.toFixed(1)} (home).` : "Not enough run data yet for this matchup."}</p>
+          <p class="plain-hint">Pick who wins by more than the line. Sportsbooks usually use ±1.5, but Kalshi's line varies by game — this defaults to whatever Kalshi actually has, so edit it to match your own book if different. ${projection ? `We project the score around ${projection.expectedHomeRuns.toFixed(1)} - ${projection.expectedAwayRuns.toFixed(1)} (home).` : "Not enough run data yet for this matchup."}</p>
           ${projection ? `
           <button class="log-bet-btn" id="kalshiRLBtn" style="margin-bottom:12px;">Get live Kalshi run line</button>
           <div class="odds-row">
-            <div class="odds-field"><label>Line (home side)</label><input type="text" id="runLineNum" value="-1.5" placeholder="e.g. -1.5"></div>
+            <div class="odds-field"><label>Line (home side)</label><input type="text" id="runLineNum" value="-${defaultRunLine}" placeholder="e.g. -1.5"></div>
             <div class="odds-field"></div>
           </div>
           <div class="odds-row">
-            <div class="odds-field"><label>${awayTeam.abbreviation || 'Away'} +1.5 odds</label><input type="text" id="awayRLOdds" placeholder="e.g. -130"></div>
-            <div class="odds-field"><label>${homeTeam.abbreviation || 'Home'} -1.5 odds</label><input type="text" id="homeRLOdds" placeholder="e.g. +110"></div>
+            <div class="odds-field"><label>${awayTeam.abbreviation || 'Away'} +${defaultRunLine} odds</label><input type="text" id="awayRLOdds" placeholder="e.g. -130"></div>
+            <div class="odds-field"><label>${homeTeam.abbreviation || 'Home'} -${defaultRunLine} odds</label><input type="text" id="homeRLOdds" placeholder="e.g. +110"></div>
           </div>
           <div id="runLineResultBox"></div>
           ` : ''}
