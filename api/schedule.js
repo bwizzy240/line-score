@@ -3,7 +3,7 @@ export default async function handler(req, res) {
   const dateParam = date ? `&date=${date}` : '';
   try {
     const r = await fetch(
-      `https://statsapi.mlb.com/api/v1/schedule?sportId=1${dateParam}&hydrate=probablePitcher,team`
+      `https://statsapi.mlb.com/api/v1/schedule?sportId=1${dateParam}&hydrate=probablePitcher,team,linescore`
     );
     if (!r.ok) throw new Error(`MLB API returned ${r.status}`);
     const data = await r.json();
