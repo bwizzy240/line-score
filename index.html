@@ -300,10 +300,10 @@ async function getStandingsRecord(teamId, season) {
   return null;
 }
 
-async function getWeather(venueId, gameDate) {
-  if (!venueId || !gameDate) return null;
+async function getWeather(venueId) {
+  if (!venueId) return null;
   try {
-    return await fetchJSON(`/api/weather?venueId=${venueId}&gameDate=${encodeURIComponent(gameDate)}`);
+    return await fetchJSON(`/api/weather?venueId=${venueId}`);
   } catch (e) {
     return null;
   }
@@ -410,6 +410,61 @@ function blendPct(overall, pyth, split, l10) {
   return weightSum > 0 ? valueSum / weightSum : 0.5;
 }
 
+// Approximate long-run park factors (100 = neutral run environment) and park orientation
+// (compass bearing in degrees from home plate toward center field). These are well-established,
+// slowly-changing public reference values, not pulled from an API.
+const PARK_DATA = {
+  108: { name: 'Angel Stadium', factor: 99, orientation: 20 },       // LAA
+  109: { name: 'Chase Field', factor: 102, orientation: 20 },        // ARI (retractable)
+  110: { name: 'Camden Yards', factor: 98, orientation: 30 },        // BAL
+  111: { name: 'Fenway Park', factor: 104, orientation: 45 },        // BOS
+  112: { name: 'Wrigley Field', factor: 101, orientation: 30 },      // CHC
+  113: { name: 'Great American Ball Park', factor: 105, orientation: 5 },  // CIN
+  114: { name: 'Progressive Field', factor: 97, orientation: 5 },    // CLE
+  115: { name: 'Coors Field', factor: 114, orientation: 50 },        // COL
+  116: { name: 'Comerica Park', factor: 96, orientation: 10 },       // DET
+  117: { name: 'Daikin Park', factor: 100, orientation: 340 },       // HOU (retractable)
+  118: { name: 'Kauffman Stadium', factor: 97, orientation: 35 },    // KC
+  119: { name: 'Dodger Stadium', factor: 97, orientation: 20 },      // LAD
+  120: { name: 'Nationals Park', factor: 99, orientation: 35 },      // WSH
+  121: { name: 'Citi Field', factor: 96, orientation: 30 },          // NYM
+  133: { name: "Sutter Health Park", factor: 100, orientation: 45 }, // ATH
+  134: { name: 'PNC Park', factor: 95, orientation: 10 },            // PIT
+  135: { name: 'Petco Park', factor: 95, orientation: 5 },           // SD
+  136: { name: 'T-Mobile Park', factor: 95, orientation: 45 },       // SEA (retractable)
+  137: { name: 'Oracle Park', factor: 92, orientation: 95 },         // SF
+  138: { name: 'Busch Stadium', factor: 96, orientation: 50 },       // STL
+  139: { name: 'Tropicana Field', factor: 96, orientation: 45 },     // TB (dome)
+  140: { name: 'Globe Life Field', factor: 99, orientation: 45 },    // TEX (retractable)
+  141: { name: 'Rogers Centre', factor: 100, orientation: 5 },       // TOR (retractable)
+  142: { name: 'Target Field', factor: 98, orientation: 45 },        // MIN
+  143: { name: 'Citizens Bank Park', factor: 104, orientation: 15 }, // PHI
+  144: { name: 'Truist Park', factor: 101, orientation: 130 },       // ATL
+  145: { name: 'Rate Field', factor: 100, orientation: 15 },         // CWS
+  146: { name: 'loanDepot Park', factor: 93, orientation: 40 },      // MIA (retractable)
+  147: { name: 'Yankee Stadium', factor: 103, orientation: 75 },     // NYY
+  158: { name: 'American Family Field', factor: 100, orientation: 55 } // MIL (retractable)
+};
+
+function getParkData(homeTeamId) {
+  return PARK_DATA[homeTeamId] || null;
+}
+
+function windEffect(windDirDeg, windMph, orientationDeg) {
+  if (windDirDeg == null || windMph == null || orientationDeg == null) return null;
+  // windDirDeg is the direction wind is blowing FROM (meteorological convention);
+  // the direction it blows TOWARD is 180° opposite.
+  const towardDeg = (windDirDeg + 180) % 360;
+  let diff = Math.abs(towardDeg - orientationDeg);
+  if (diff > 180) diff = 360 - diff;
+
+  let direction = 'cross';
+  if (diff <= 45) direction = 'out';
+  else if (diff >= 135) direction = 'in';
+
+  return { direction, windMph };
+}
+
 function last10Pct(rec) {
   const l10 = rec && (rec.records?.splitRecords || []).find(r => r.type === 'lastTen');
   if (!l10) return null;
@@ -502,7 +557,7 @@ async function renderMatchup(gamePk) {
       getStandingsRecord(homeTeam.id, season),
       getPitcherERA(awayPitcher && awayPitcher.id, season),
       getPitcherERA(homePitcher && homePitcher.id, season),
-      getWeather(game.venue && game.venue.id, game.gameDate),
+      getWeather(game.venue && game.venue.id),
       getRecentGames(awayTeam.id, game.gameDate),
       getRecentGames(homeTeam.id, game.gameDate),
       getHeadToHead(awayTeam.id, homeTeam.id, season, game.gameDate)
@@ -543,12 +598,17 @@ async function renderMatchup(gamePk) {
     const awayPctDisplay = 100 - homePctDisplay;
 
     const projection = projectRuns(awayRec, homeRec);
-    let tempAdjustment = 0;
-    if (projection && weather && weather.available && !weather.isDome && typeof weather.tempF === 'number') {
-      // Warmer air is less dense, ball carries slightly further; small, capped, and only applied outdoors.
-      tempAdjustment = Math.max(-0.6, Math.min(0.6, (weather.tempF - 70) * 0.015));
-      projection.expectedTotal += tempAdjustment;
+    const park = getParkData(homeTeam.id);
+
+    if (projection && park) {
+      // Park factor scales the whole scoring environment, applied before other situational nudges.
+      const scale = park.factor / 100;
+      projection.expectedAwayRuns *= scale;
+      projection.expectedHomeRuns *= scale;
+      projection.expectedMargin = projection.expectedHomeRuns - projection.expectedAwayRuns;
+      projection.expectedTotal = projection.expectedAwayRuns + projection.expectedHomeRuns;
     }
+
     const awayFatigueRuns = fatigueRunsAdjustment(awayWorkload);
     const homeFatigueRuns = fatigueRunsAdjustment(homeWorkload);
     if (projection && (awayFatigueRuns > 0 || homeFatigueRuns > 0)) {
@@ -558,6 +618,27 @@ async function renderMatchup(gamePk) {
       projection.expectedMargin = projection.expectedHomeRuns - projection.expectedAwayRuns;
       projection.expectedTotal += awayFatigueRuns + homeFatigueRuns;
     }
+
+    let tempAdjustment = 0;
+    if (projection && weather && weather.available && !weather.isDome && typeof weather.tempF === 'number') {
+      // Warmer air is less dense, ball carries slightly further; small, capped, and only applied outdoors.
+      tempAdjustment = Math.max(-0.6, Math.min(0.6, (weather.tempF - 70) * 0.015));
+      projection.expectedTotal += tempAdjustment;
+    }
+
+    let wind = null;
+    if (projection && weather && weather.available && !weather.isDome && park && typeof weather.windDirDeg === 'number' && typeof weather.windMph === 'number') {
+      wind = windEffect(weather.windDirDeg, weather.windMph, park.orientation);
+      if (wind) {
+        // Small, capped, and only moves the total — direction/speed alone can't fully capture
+        // a park's true wind physics, so this is a reasonable nudge, not a precise model.
+        let windAdj = 0;
+        if (wind.direction === 'out') windAdj = Math.min(0.8, wind.windMph * 0.04);
+        else if (wind.direction === 'in') windAdj = -Math.min(0.8, wind.windMph * 0.04);
+        projection.expectedTotal += windAdj;
+      }
+    }
+
     const defaultTotal = projection ? (Math.round(projection.expectedTotal * 2) / 2).toFixed(1) : '';
 
     el.innerHTML = `
@@ -624,9 +705,10 @@ async function renderMatchup(gamePk) {
 
         <div class="odds-section" style="border-top:1px solid var(--line);">
           <h3>Total (over/under)</h3>
-          ${weather && weather.isDome ? `<p class="hint">${weather.venueName} has a ${weather.roofType ? weather.roofType.toLowerCase() : 'dome'} — weather isn't a factor here.</p>` : ''}
-          ${weather && weather.available && !weather.isDome ? `<p class="hint">${Math.round(weather.tempF)}°F, wind ${Math.round(weather.windMph)} mph${weather.precipProb ? `, ${weather.precipProb}% chance of rain` : ''} at first pitch. Temperature is already nudged into the projection below (warmer air carries the ball slightly further); wind isn't auto-adjusted since it depends on the park's orientation — factor it in yourself if it's blowing hard in one direction.</p>` : ''}
-          ${weather && !weather.available && !weather.isDome ? `<p class="hint">Forecast not available yet for this game time — check closer to first pitch.</p>` : ''}
+          ${park ? `<p class="hint">${park.name}: ${park.factor > 102 ? 'hitter-friendly' : (park.factor < 98 ? 'pitcher-friendly' : 'roughly neutral')} park (factor ${park.factor}).</p>` : ''}
+          ${weather && weather.isDome ? `<p class="hint">${weather.venueName} has a ${weather.roofType ? weather.roofType.toLowerCase() : 'dome'} — wind isn't a factor here.</p>` : ''}
+          ${weather && weather.available && !weather.isDome ? `<p class="hint">Current conditions at ${weather.venueName}: ${Math.round(weather.tempF)}°F, wind ${Math.round(weather.windMph)} mph${wind ? ` blowing ${wind.direction === 'out' ? 'out (favors offense)' : (wind.direction === 'in' ? 'in (favors pitching)' : 'crosswise, limited effect')}` : ''}${weather.precipNow > 0 ? `, rain currently falling` : ''}. This is real-time, not a forecast for first pitch — if the game is hours away, conditions may shift by then. Temp, park, and wind are all already folded into the projection below.</p>` : ''}
+          ${weather && !weather.available ? `<p class="hint">Current conditions not available right now.</p>` : ''}
           <p class="hint">${projection ? `Projected total: ${projection.expectedTotal.toFixed(1)} runs. Enter the total line and odds from your book.` : "Not enough run data yet for this matchup."}</p>
           ${projection ? `
           <div class="odds-row">
