@@ -328,6 +328,15 @@ function fatigueRunsAdjustment(recentGames) {
   return Math.min(0.35, adj);
 }
 
+async function getHeadToHead(teamId, opponentId, season, beforeDate) {
+  if (!teamId || !opponentId || !season) return null;
+  try {
+    return await fetchJSON(`/api/head-to-head?teamId=${teamId}&opponentId=${opponentId}&season=${season}&beforeDate=${encodeURIComponent(beforeDate)}`);
+  } catch (e) {
+    return null;
+  }
+}
+
 async function getPitcherERA(pitcherId, season) {
   if (!pitcherId) return null;
   try {
@@ -488,14 +497,15 @@ async function renderMatchup(gamePk) {
   const homePitcher = game.teams.home.probablePitcher;
 
   try {
-    const [awayRec, homeRec, awayERA, homeERA, weather, awayWorkload, homeWorkload] = await Promise.all([
+    const [awayRec, homeRec, awayERA, homeERA, weather, awayWorkload, homeWorkload, h2h] = await Promise.all([
       getStandingsRecord(awayTeam.id, season),
       getStandingsRecord(homeTeam.id, season),
       getPitcherERA(awayPitcher && awayPitcher.id, season),
       getPitcherERA(homePitcher && homePitcher.id, season),
       getWeather(game.venue && game.venue.id, game.gameDate),
       getRecentGames(awayTeam.id, game.gameDate),
-      getRecentGames(homeTeam.id, game.gameDate)
+      getRecentGames(homeTeam.id, game.gameDate),
+      getHeadToHead(awayTeam.id, homeTeam.id, season, game.gameDate)
     ]);
 
     const awayOverall = pctFromRecord(awayRec);
@@ -518,6 +528,14 @@ async function renderMatchup(gamePk) {
       const diff = awayVal - homeVal;
       const shift = Math.max(-0.08, Math.min(0.08, diff * 0.025));
       homeWinProb = Math.min(0.95, Math.max(0.05, homeWinProb + shift));
+    }
+
+    // Head-to-head is a weak signal (small sample), so it only applies with 3+ games played
+    // this season and is capped tightly so it can't meaningfully move the number on its own.
+    if (h2h && h2h.gamesPlayed >= 3) {
+      const awayH2HPct = h2h.wins / h2h.gamesPlayed;
+      const h2hShift = Math.max(-0.03, Math.min(0.03, (awayH2HPct - 0.5) * 0.08));
+      homeWinProb = Math.min(0.95, Math.max(0.05, homeWinProb - h2hShift));
     }
 
     const awayWinProb = 1 - homeWinProb;
@@ -565,6 +583,7 @@ async function renderMatchup(gamePk) {
             <div class="home" style="width:${homePctDisplay}%"></div>
           </div>
           <div class="probbar-nums"><span>${awayPctDisplay}%</span><span>${homePctDisplay}%</span></div>
+          ${h2h && h2h.gamesPlayed > 0 ? `<div style="text-align:center; font-size:11px; color:var(--ink-soft); margin-top:8px;">Season series: ${awayTeam.abbreviation || 'Away'} ${h2h.wins}-${h2h.losses} vs ${homeTeam.abbreviation || 'Home'}${h2h.gamesPlayed < 3 ? ' (too few games to factor in yet)' : ''}</div>` : ''}
         </div>
         <div class="pitchers">
           <div>
