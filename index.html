@@ -309,6 +309,25 @@ async function getWeather(venueId, gameDate) {
   }
 }
 
+async function getRecentGames(teamId, gameDate) {
+  if (!teamId || !gameDate) return null;
+  try {
+    return await fetchJSON(`/api/recent-games?teamId=${teamId}&beforeDate=${encodeURIComponent(gameDate)}`);
+  } catch (e) {
+    return null;
+  }
+}
+
+function fatigueRunsAdjustment(recentGames) {
+  if (!recentGames) return 0;
+  let adj = 0;
+  const g = recentGames.gamesInLast3Days ?? 0;
+  if (g >= 3) adj += 0.20;
+  else if (g === 2) adj += 0.10;
+  if (recentGames.doubleHeaderRecently) adj += 0.15;
+  return Math.min(0.35, adj);
+}
+
 async function getPitcherERA(pitcherId, season) {
   if (!pitcherId) return null;
   try {
@@ -469,12 +488,14 @@ async function renderMatchup(gamePk) {
   const homePitcher = game.teams.home.probablePitcher;
 
   try {
-    const [awayRec, homeRec, awayERA, homeERA, weather] = await Promise.all([
+    const [awayRec, homeRec, awayERA, homeERA, weather, awayWorkload, homeWorkload] = await Promise.all([
       getStandingsRecord(awayTeam.id, season),
       getStandingsRecord(homeTeam.id, season),
       getPitcherERA(awayPitcher && awayPitcher.id, season),
       getPitcherERA(homePitcher && homePitcher.id, season),
-      getWeather(game.venue && game.venue.id, game.gameDate)
+      getWeather(game.venue && game.venue.id, game.gameDate),
+      getRecentGames(awayTeam.id, game.gameDate),
+      getRecentGames(homeTeam.id, game.gameDate)
     ]);
 
     const awayOverall = pctFromRecord(awayRec);
@@ -509,6 +530,15 @@ async function renderMatchup(gamePk) {
       // Warmer air is less dense, ball carries slightly further; small, capped, and only applied outdoors.
       tempAdjustment = Math.max(-0.6, Math.min(0.6, (weather.tempF - 70) * 0.015));
       projection.expectedTotal += tempAdjustment;
+    }
+    const awayFatigueRuns = fatigueRunsAdjustment(awayWorkload);
+    const homeFatigueRuns = fatigueRunsAdjustment(homeWorkload);
+    if (projection && (awayFatigueRuns > 0 || homeFatigueRuns > 0)) {
+      // A fatigued bullpen tends to give up more runs to the opponent when it enters the game.
+      projection.expectedHomeRuns += awayFatigueRuns;
+      projection.expectedAwayRuns += homeFatigueRuns;
+      projection.expectedMargin = projection.expectedHomeRuns - projection.expectedAwayRuns;
+      projection.expectedTotal += awayFatigueRuns + homeFatigueRuns;
     }
     const defaultTotal = projection ? (Math.round(projection.expectedTotal * 2) / 2).toFixed(1) : '';
 
@@ -558,6 +588,7 @@ async function renderMatchup(gamePk) {
 
         <div class="odds-section" style="border-top:1px solid var(--line);">
           <h3>Run line</h3>
+          ${(awayWorkload || homeWorkload) ? `<p class="hint">Bullpen workload (last 3 days): ${awayTeam.abbreviation || 'Away'} ${awayWorkload ? awayWorkload.gamesInLast3Days + ' games' + (awayWorkload.doubleHeaderRecently ? ' incl. doubleheader' : '') : '—'} · ${homeTeam.abbreviation || 'Home'} ${homeWorkload ? homeWorkload.gamesInLast3Days + ' games' + (homeWorkload.doubleHeaderRecently ? ' incl. doubleheader' : '') : '—'}. A heavier stretch nudges the projected runs against that team.</p>` : ''}
           <p class="hint">${projection ? `Projected margin: ${projection.expectedHomeRuns.toFixed(1)} - ${projection.expectedAwayRuns.toFixed(1)} (home). Enter the line and odds from your book — usually ±1.5.` : "Not enough run data yet for this matchup."}</p>
           ${projection ? `
           <div class="odds-row">
