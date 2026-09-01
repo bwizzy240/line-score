@@ -1,5 +1,5 @@
 export default async function handler(req, res) {
-  const { gamePk } = req.query;
+  const { gamePk, awayTeamId, homeTeamId, season } = req.query;
   if (!gamePk) return res.status(400).json({ error: 'missing gamePk' });
 
   try {
@@ -17,6 +17,7 @@ export default async function handler(req, res) {
         }
         if (!p) return null;
         return {
+          id: pid,
           name: p.person && p.person.fullName,
           position: p.position && p.position.abbreviation
         };
@@ -24,14 +25,74 @@ export default async function handler(req, res) {
       return list.length ? list : null;
     }
 
-    const away = extractLineup(data.teams && data.teams.away);
-    const home = extractLineup(data.teams && data.teams.home);
+    const awayList = extractLineup(data.teams && data.teams.away);
+    const homeList = extractLineup(data.teams && data.teams.home);
+    const lineupsPosted = !!(awayList && homeList);
+
+    let awayLineupOPS = null;
+    let homeLineupOPS = null;
+    let awayTeamOPS = null;
+    let homeTeamOPS = null;
+
+    if (lineupsPosted && season) {
+      const allIds = [...awayList.map(p => p.id), ...homeList.map(p => p.id)];
+      try {
+        const statsRes = await fetch(
+          `https://statsapi.mlb.com/api/v1/people?personIds=${allIds.join(',')}&hydrate=stats(group=[hitting],type=[season],season=${season})`
+        );
+        if (statsRes.ok) {
+          const statsData = await statsRes.json();
+          const opsById = {};
+          (statsData.people || []).forEach(person => {
+            const groups = person.stats || [];
+            const hittingGroup = groups.find(g => g.group && g.group.displayName === 'hitting');
+            const split = hittingGroup && hittingGroup.splits && hittingGroup.splits[0];
+            const ops = split && split.stat && parseFloat(split.stat.ops);
+            if (ops && !isNaN(ops)) opsById[person.id] = ops;
+          });
+
+          const avgOPS = (list) => {
+            const vals = list.map(p => opsById[p.id]).filter(v => v);
+            return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+          };
+          awayLineupOPS = avgOPS(awayList);
+          homeLineupOPS = avgOPS(homeList);
+        }
+      } catch (e) { /* leave lineup OPS null on failure */ }
+
+      if (awayTeamId) {
+        try {
+          const tRes = await fetch(`https://statsapi.mlb.com/api/v1/teams/${awayTeamId}/stats?stats=season&group=hitting&season=${season}`);
+          if (tRes.ok) {
+            const tData = await tRes.json();
+            const split = tData.stats && tData.stats[0] && tData.stats[0].splits && tData.stats[0].splits[0];
+            const ops = split && split.stat && parseFloat(split.stat.ops);
+            if (ops && !isNaN(ops)) awayTeamOPS = ops;
+          }
+        } catch (e) { /* leave null */ }
+      }
+      if (homeTeamId) {
+        try {
+          const tRes = await fetch(`https://statsapi.mlb.com/api/v1/teams/${homeTeamId}/stats?stats=season&group=hitting&season=${season}`);
+          if (tRes.ok) {
+            const tData = await tRes.json();
+            const split = tData.stats && tData.stats[0] && tData.stats[0].splits && tData.stats[0].splits[0];
+            const ops = split && split.stat && parseFloat(split.stat.ops);
+            if (ops && !isNaN(ops)) homeTeamOPS = ops;
+          }
+        } catch (e) { /* leave null */ }
+      }
+    }
 
     res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate');
     res.status(200).json({
-      awayLineup: away,
-      homeLineup: home,
-      lineupsPosted: !!(away && home)
+      awayLineup: awayList,
+      homeLineup: homeList,
+      lineupsPosted,
+      awayLineupOPS,
+      homeLineupOPS,
+      awayTeamOPS,
+      homeTeamOPS
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
