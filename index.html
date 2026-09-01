@@ -363,6 +363,31 @@
   }
   .parlay-combined { font-size: 20px; font-weight: 800; font-family: 'SF Mono', ui-monospace, monospace; color: var(--field); }
   .parlay-fairodds { font-size: 11px; color: var(--ink-soft); }
+
+  /* Desktop: everything above is tuned for phone width and stays untouched below this point.
+     This block only activates on wider screens, giving the layout room to breathe instead of
+     sitting in a narrow centered column with tiny phone-sized text and cards. */
+  @media (min-width: 900px) {
+    main { max-width: 1100px; padding: 24px 32px; }
+    .games { gap: 14px; }
+    .game-row-pair { gap: 14px; }
+    .game-row { padding: 16px 14px; border-radius: 16px; gap: 10px; }
+    .team-badge { width: 30px; height: 30px; font-size: 10.5px; }
+    .game-row .team-name { font-size: 13px; }
+    .game-row .team-record { font-size: 11px; }
+    .game-row .matchup-time { font-size: 12.5px; }
+    .pitcher-avatar { width: 20px; height: 20px; font-size: 8px; }
+    .pitcher-info { font-size: 11px; }
+    .pitcher-info .p-stats .unit { font-size: 9px; }
+
+    .matchup { max-width: 640px; margin: 0 auto; }
+    .bet-card, .parlay-card { max-width: 640px; margin-left: auto; margin-right: auto; }
+    header, .tabbar, .datebar { padding-left: 32px; padding-right: 32px; }
+  }
+
+  @media (min-width: 1300px) {
+    main { max-width: 1400px; }
+  }
 </style>
 </head>
 <body>
