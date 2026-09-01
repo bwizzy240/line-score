@@ -82,8 +82,8 @@
   .date-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); margin-top: 1px; }
   main { padding: 16px; max-width: 640px; margin: 0 auto; }
   .status { text-align: center; color: var(--ink-soft); padding: 30px 10px; font-size: 14px; }
-  .games { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 22px; }
-  #matchupContainer { grid-column: 1 / -1; }
+  .games { display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; }
+  .game-row-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .game-row {
     background: var(--card);
     border: 1px solid rgba(255,255,255,0.06);
@@ -521,7 +521,14 @@ async function loadGames() {
 
     container.className = 'games';
     container.innerHTML = '';
-    games.forEach(g => {
+    let currentRowPair = null;
+    games.forEach((g, idx) => {
+      if (idx % 2 === 0) {
+        currentRowPair = document.createElement('div');
+        currentRowPair.className = 'game-row-pair';
+        container.appendChild(currentRowPair);
+      }
+
       const row = document.createElement('div');
       row.className = 'game-row';
       row.dataset.gameId = g.gamePk;
@@ -557,7 +564,7 @@ async function loadGames() {
         </div>
       `;
       row.addEventListener('click', () => selectGame(g.gamePk, row));
-      container.appendChild(row);
+      currentRowPair.appendChild(row);
     });
   } catch (err) {
     container.className = 'status';
@@ -584,7 +591,8 @@ function selectGame(gamePk, rowEl) {
   });
 
   if (rowEl) {
-    rowEl.insertAdjacentElement('afterend', matchupEl);
+    const rowPair = rowEl.closest('.game-row-pair') || rowEl;
+    rowPair.insertAdjacentElement('afterend', matchupEl);
     rowEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
