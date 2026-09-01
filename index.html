@@ -742,9 +742,11 @@ function normalCDF(z) {
   return p;
 }
 
-// Typical MLB game-to-game standard deviations, based on historical run distributions
-const MARGIN_STD_DEV = 4.8;
-const TOTAL_STD_DEV = 4.2;
+// Derived from actual MLB scoring data: teams average ~4.4-4.5 runs/game with variance ~9.7-10
+// (source: Retrosheet-based studies). Combining two independent team distributions gives
+// variance(total) = variance(margin) = var(home) + var(away) ≈ 19.4, so std dev ≈ 4.4 for both.
+const MARGIN_STD_DEV = 4.4;
+const TOTAL_STD_DEV = 4.4;
 
 function projectRuns(awayRec, homeRec) {
   const awayGP = gamesPlayed(awayRec);
