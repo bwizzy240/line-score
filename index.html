@@ -180,11 +180,6 @@
   }
   .odds-section .hint { font-size: 12px; color: var(--ink-soft); margin: 0 0 14px; line-height: 1.5; }
   .odds-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-  .underdog-tag {
-    font-size: 10.5px; font-weight: 700; color: var(--amber);
-    background: var(--amber-soft); border: 1px solid var(--amber);
-    border-radius: 6px; padding: 3px 7px; margin-bottom: 6px; display: inline-block;
-  }
   .odds-field label {
     display: block; font-size: 11px; text-transform: uppercase; color: var(--ink-soft);
     margin-bottom: 5px; letter-spacing: 0.4px; font-weight: 600;
@@ -1135,14 +1130,8 @@ async function renderMatchup(gamePk) {
           <p class="plain-hint">Pick who wins. Type in the odds from your book — we'll tell you the implied chance those odds represent, and whether our estimate is higher or lower ("edge"). Or pull live odds from Kalshi instead of typing your own.</p>
           <button class="log-bet-btn" id="kalshiBtn" style="margin-bottom:12px;">Checking Kalshi…</button>
           <div class="odds-row">
-            <div class="odds-field">
-              ${awayWinProb < homeWinProb ? `<div class="underdog-tag">🐶 ${(awayWinProb * 100).toFixed(0)}% chance to win outright</div>` : ''}
-              <label>${awayTeam.abbreviation || 'Away'} odds</label><input type="text" id="awayOdds" placeholder="e.g. +130">
-            </div>
-            <div class="odds-field">
-              ${homeWinProb < awayWinProb ? `<div class="underdog-tag">🐶 ${(homeWinProb * 100).toFixed(0)}% chance to win outright</div>` : ''}
-              <label>${homeTeam.abbreviation || 'Home'} odds</label><input type="text" id="homeOdds" placeholder="e.g. -150">
-            </div>
+            <div class="odds-field"><label>${awayTeam.abbreviation || 'Away'} odds</label><input type="text" id="awayOdds" placeholder="e.g. +130"></div>
+            <div class="odds-field"><label>${homeTeam.abbreviation || 'Home'} odds</label><input type="text" id="homeOdds" placeholder="e.g. -150"></div>
           </div>
           <div id="resultBox"></div>
         </div>
