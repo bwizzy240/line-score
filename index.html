@@ -83,49 +83,49 @@
   main { padding: 16px; max-width: 640px; margin: 0 auto; }
   .status { text-align: center; color: var(--ink-soft); padding: 30px 10px; font-size: 14px; }
   .games { display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; }
-  .game-row-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .game-row-pair { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
   .game-row {
     background: var(--card);
     border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 14px;
-    padding: 12px 12px;
+    border-radius: 12px;
+    padding: 9px 8px;
     cursor: pointer;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     font-size: 13px;
     box-shadow: 0 4px 14px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.3);
     transition: transform 0.1s ease, box-shadow 0.1s ease;
   }
   .game-row:active { transform: scale(0.99); box-shadow: 0 2px 8px rgba(0,0,0,0.35); }
   .game-row.active { box-shadow: 0 4px 14px rgba(0,0,0,0.35), 0 0 0 1.5px var(--accent); }
-  .game-row .team-stack { display: flex; flex-direction: column; gap: 8px; }
-  .game-row .team-line { display: flex; align-items: center; gap: 8px; }
+  .game-row .team-stack { display: flex; flex-direction: column; gap: 6px; }
+  .game-row .team-line { display: flex; align-items: center; gap: 5px; }
   .game-row .team-line > span:last-child { display: flex; flex-direction: column; min-width: 0; }
   .team-badge {
-    width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+    width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
-    font-size: 9px; font-weight: 800; color: var(--ink);
+    font-size: 7.5px; font-weight: 800; color: var(--ink);
     border: 1.5px solid rgba(255,255,255,0.18);
   }
   .team-badge { box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
-  .game-row .team-name { font-weight: 700; color: var(--ink); font-size: 12.5px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .game-row .team-record { font-size: 10px; color: var(--ink-soft); display: block; }
+  .game-row .team-name { font-weight: 700; color: var(--ink); font-size: 10.5px; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .game-row .team-record { font-size: 8.5px; color: var(--ink-soft); display: block; }
   .game-row .divider-col { height: 1px; width: 100%; background: var(--line); }
-  .game-row .matchup-stack { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-  .game-row .matchup-time { font-size: 11.5px; font-weight: 700; color: var(--ink); margin-bottom: 2px; display: flex; align-items: center; gap: 6px; }
-  .pitcher-line { display: flex; align-items: center; gap: 6px; }
+  .game-row .matchup-stack { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .game-row .matchup-time { font-size: 10px; font-weight: 700; color: var(--ink); margin-bottom: 1px; display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pitcher-line { display: flex; align-items: center; gap: 4px; }
   .pitcher-avatar {
-    width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+    width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
     background: var(--chalk); border: 1px solid var(--line);
     display: flex; align-items: center; justify-content: center;
-    font-size: 7px; font-weight: 700; color: var(--ink-soft);
+    font-size: 6px; font-weight: 700; color: var(--ink-soft);
   }
-  .pitcher-info { font-size: 10px; line-height: 1.25; min-width: 0; }
+  .pitcher-info { font-size: 8.5px; line-height: 1.2; min-width: 0; }
   .pitcher-info .p-name { color: var(--ink); font-weight: 600; display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
   .pitcher-info .p-hand { color: var(--ink-soft); }
   .pitcher-info .p-stats { color: var(--ink-soft); }
-  .pitcher-info .p-stats .unit { font-size: 8px; }
+  .pitcher-info .p-stats .unit { font-size: 7px; }
   .live-dot {
     width: 7px; height: 7px; border-radius: 50%; background: var(--neg);
     animation: pulse 1.6s infinite;
@@ -523,7 +523,7 @@ async function loadGames() {
     container.innerHTML = '';
     let currentRowPair = null;
     games.forEach((g, idx) => {
-      if (idx % 2 === 0) {
+      if (idx % 3 === 0) {
         currentRowPair = document.createElement('div');
         currentRowPair.className = 'game-row-pair';
         container.appendChild(currentRowPair);
