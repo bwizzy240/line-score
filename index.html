@@ -357,7 +357,7 @@
 </main>
 
 <footer>
-  Model blends run differential (Pythagorean win expectation), season record, home/away-specific record, recent form, starting pitcher FIP/ERA, park factors, current weather, bullpen workload, and season head-to-head — it is not a guarantee and doesn't account for everything a sportsbook prices in. Starting lineups and recent injured-list moves are shown for context but aren't yet folded into the probability numbers. Use it as one input, not the whole decision. Bet only what you can afford to lose.
+  Model blends run differential (Pythagorean win expectation), season record, home/away-specific record, recent form, starting pitcher FIP/ERA, park factors, current weather, bullpen workload, lineup strength (once posted), and season head-to-head — it is not a guarantee and doesn't account for everything a sportsbook prices in. Recent injured-list moves are shown for context but aren't folded into the numbers directly. Use it as one input, not the whole decision. Bet only what you can afford to lose.
 </footer>
 
 <script>
@@ -522,9 +522,9 @@ async function getHeadToHead(teamId, opponentId, season, beforeDate) {
   }
 }
 
-async function getLineup(gamePk) {
+async function getLineup(gamePk, awayTeamId, homeTeamId, season) {
   try {
-    return await fetchJSON(`/api/lineup?gamePk=${gamePk}`);
+    return await fetchJSON(`/api/lineup?gamePk=${gamePk}&awayTeamId=${awayTeamId}&homeTeamId=${homeTeamId}&season=${season}`);
   } catch (e) {
     return null;
   }
@@ -815,7 +815,7 @@ async function renderMatchup(gamePk) {
       getRecentGames(awayTeam.id, game.gameDate),
       getRecentGames(homeTeam.id, game.gameDate),
       getHeadToHead(awayTeam.id, homeTeam.id, season, game.gameDate),
-      getLineup(gamePk),
+      getLineup(gamePk, awayTeam.id, homeTeam.id, season),
       getRecentTransactions(awayTeam.id),
       getRecentTransactions(homeTeam.id),
       getKalshiOdds(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME'),
@@ -889,6 +889,27 @@ async function renderMatchup(gamePk) {
         if (wind.direction === 'out') windAdj = Math.min(0.8, wind.windMph * 0.04);
         else if (wind.direction === 'in') windAdj = -Math.min(0.8, wind.windMph * 0.04);
         projection.expectedTotal += windAdj;
+      }
+    }
+
+    // Lineup strength: compare today's posted lineup (average OPS of the 9 starters) against
+    // that team's own season OPS. A weaker-than-normal lineup (missing a bat) nudges that
+    // team's own projected runs down; a stronger one nudges up. Small, capped, own-team only —
+    // and only kicks in once lineups are actually posted, typically 1-2 hours before first pitch.
+    function lineupRunsAdjustment(lineupOPS, teamOPS) {
+      if (lineupOPS == null || teamOPS == null) return 0;
+      const opsDelta = lineupOPS - teamOPS;
+      return Math.max(-0.5, Math.min(0.5, opsDelta * 15));
+    }
+    let awayLineupAdj = 0, homeLineupAdj = 0;
+    if (projection && lineup && lineup.lineupsPosted) {
+      awayLineupAdj = lineupRunsAdjustment(lineup.awayLineupOPS, lineup.awayTeamOPS);
+      homeLineupAdj = lineupRunsAdjustment(lineup.homeLineupOPS, lineup.homeTeamOPS);
+      if (awayLineupAdj || homeLineupAdj) {
+        projection.expectedAwayRuns += awayLineupAdj;
+        projection.expectedHomeRuns += homeLineupAdj;
+        projection.expectedMargin = projection.expectedHomeRuns - projection.expectedAwayRuns;
+        projection.expectedTotal += awayLineupAdj + homeLineupAdj;
       }
     }
 
@@ -1018,6 +1039,13 @@ async function renderMatchup(gamePk) {
             <div class="detail-block">
               <div class="detail-title">Starting lineups</div>
               ${lineup && lineup.lineupsPosted ? `
+                ${(lineup.awayLineupOPS || lineup.homeLineupOPS) ? `
+                  <div class="chip-row" style="margin-bottom:10px;">
+                    ${lineup.awayLineupOPS && lineup.awayTeamOPS ? `<span class="chip ${awayLineupAdj > 0.02 ? 'chip-in' : (awayLineupAdj < -0.02 ? 'chip-out' : '')}">${awayTeam.abbreviation} lineup OPS ${lineup.awayLineupOPS.toFixed(3)} (season ${lineup.awayTeamOPS.toFixed(3)})</span>` : ''}
+                    ${lineup.homeLineupOPS && lineup.homeTeamOPS ? `<span class="chip ${homeLineupAdj > 0.02 ? 'chip-in' : (homeLineupAdj < -0.02 ? 'chip-out' : '')}">${homeTeam.abbreviation} lineup OPS ${lineup.homeLineupOPS.toFixed(3)} (season ${lineup.homeTeamOPS.toFixed(3)})</span>` : ''}
+                  </div>
+                  <div style="font-size:10.5px; color:var(--ink-soft); margin-bottom:10px;">A lineup notably weaker or stronger than that team's own season average nudges their projected runs — small and capped, already folded into run line and total above.</div>
+                ` : ''}
                 <div class="detail-cols">
                   <div class="lineup-list">${lineup.awayLineup.map((p, i) => `<div class="lineup-row"><span class="lineup-num">${i + 1}</span><span class="lineup-name">${p.name}</span><span class="lineup-pos">${p.position}</span></div>`).join('')}</div>
                   <div class="lineup-list">${lineup.homeLineup.map((p, i) => `<div class="lineup-row"><span class="lineup-num">${i + 1}</span><span class="lineup-name">${p.name}</span><span class="lineup-pos">${p.position}</span></div>`).join('')}</div>
