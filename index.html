@@ -82,49 +82,49 @@
   .date-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); margin-top: 1px; }
   main { padding: 16px; max-width: 640px; margin: 0 auto; }
   .status { text-align: center; color: var(--ink-soft); padding: 30px 10px; font-size: 14px; }
-  .games { display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; }
+  .games { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 22px; }
   .game-row {
     background: var(--card);
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 14px;
-    padding: 14px 16px;
+    padding: 12px 12px;
     cursor: pointer;
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    align-items: stretch;
-    gap: 10px;
-    font-size: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 13px;
     box-shadow: 0 4px 14px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.3);
     transition: transform 0.1s ease, box-shadow 0.1s ease;
   }
   .game-row:active { transform: scale(0.99); box-shadow: 0 2px 8px rgba(0,0,0,0.35); }
   .game-row.active { box-shadow: 0 4px 14px rgba(0,0,0,0.35), 0 0 0 1.5px var(--accent); }
-  .game-row .team-stack { display: flex; flex-direction: column; justify-content: space-around; gap: 14px; }
-  .game-row .team-line { display: flex; align-items: center; gap: 10px; }
+  .game-row .team-stack { display: flex; flex-direction: column; gap: 8px; }
+  .game-row .team-line { display: flex; align-items: center; gap: 8px; }
+  .game-row .team-line > span:last-child { display: flex; flex-direction: column; min-width: 0; }
   .team-badge {
-    width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+    width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
-    font-size: 10.5px; font-weight: 800; color: var(--ink);
+    font-size: 9px; font-weight: 800; color: var(--ink);
     border: 1.5px solid rgba(255,255,255,0.18);
   }
   .team-badge { box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
-  .game-row .team-name { font-weight: 700; color: var(--ink); font-size: 14px; }
-  .game-row .team-record { font-size: 11.5px; color: var(--ink-soft); margin-left: 6px; }
-  .game-row .divider-col { width: 1px; background: var(--line); }
+  .game-row .team-name { font-weight: 700; color: var(--ink); font-size: 12.5px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .game-row .team-record { font-size: 10px; color: var(--ink-soft); display: block; }
+  .game-row .divider-col { height: 1px; width: 100%; background: var(--line); }
   .game-row .matchup-stack { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-  .game-row .matchup-time { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
-  .pitcher-line { display: flex; align-items: center; gap: 8px; }
+  .game-row .matchup-time { font-size: 11.5px; font-weight: 700; color: var(--ink); margin-bottom: 2px; display: flex; align-items: center; gap: 6px; }
+  .pitcher-line { display: flex; align-items: center; gap: 6px; }
   .pitcher-avatar {
-    width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
-    background: var(--card); border: 1px solid var(--line);
+    width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+    background: var(--chalk); border: 1px solid var(--line);
     display: flex; align-items: center; justify-content: center;
-    font-size: 8.5px; font-weight: 700; color: var(--ink-soft);
+    font-size: 7px; font-weight: 700; color: var(--ink-soft);
   }
-  .pitcher-info { font-size: 11.5px; line-height: 1.3; min-width: 0; }
-  .pitcher-info .p-name { color: var(--ink); font-weight: 600; }
+  .pitcher-info { font-size: 10px; line-height: 1.25; min-width: 0; }
+  .pitcher-info .p-name { color: var(--ink); font-weight: 600; display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
   .pitcher-info .p-hand { color: var(--ink-soft); }
   .pitcher-info .p-stats { color: var(--ink-soft); }
-  .pitcher-info .p-stats .unit { font-size: 9px; }
+  .pitcher-info .p-stats .unit { font-size: 8px; }
   .live-dot {
     width: 7px; height: 7px; border-radius: 50%; background: var(--neg);
     animation: pulse 1.6s infinite;
@@ -541,11 +541,11 @@ async function loadGames() {
         <div class="team-stack">
           <div class="team-line">
             <span class="team-badge" style="background:${getTeamColor(awayTeam.id)}; color:${readableTextColor(getTeamColor(awayTeam.id))};">${awayTeam.abbreviation || '?'}</span>
-            <span class="team-name">${awayTeam.name}</span><span class="team-record">${awayRecStr}</span>
+            <span><span class="team-name">${awayTeam.teamName || awayTeam.name}</span><span class="team-record">${awayRecStr}</span></span>
           </div>
           <div class="team-line">
             <span class="team-badge" style="background:${getTeamColor(homeTeam.id)}; color:${readableTextColor(getTeamColor(homeTeam.id))};">${homeTeam.abbreviation || '?'}</span>
-            <span class="team-name">${homeTeam.name}</span><span class="team-record">${homeRecStr}</span>
+            <span><span class="team-name">${homeTeam.teamName || homeTeam.name}</span><span class="team-record">${homeRecStr}</span></span>
           </div>
         </div>
         <div class="divider-col"></div>
