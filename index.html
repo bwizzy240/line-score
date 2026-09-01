@@ -647,6 +647,17 @@ async function getWeather(venueId) {
   }
 }
 
+async function getTeamContext(teamId, pitcherId, gameDate, currentVenueId) {
+  try {
+    const params = new URLSearchParams({ teamId, beforeDate: gameDate });
+    if (pitcherId) params.set('pitcherId', pitcherId);
+    if (currentVenueId) params.set('currentVenueId', currentVenueId);
+    return await fetchJSON(`/api/team-context?${params.toString()}`);
+  } catch (e) {
+    return null;
+  }
+}
+
 async function getRecentGames(teamId, gameDate) {
   if (!teamId || !gameDate) return null;
   try {
@@ -860,6 +871,38 @@ function getTeamColor(teamId) {
   return TEAM_COLORS[teamId] || '#5B6B7A';
 }
 
+// Kalshi price history, stored locally so we can show line movement over time
+// (there's no database here, so this only sees movement since you started using the app on this device).
+function recordKalshiSnapshot(gamePk, homeProb) {
+  try {
+    const key = 'kalshiSnapshots';
+    const all = JSON.parse(localStorage.getItem(key) || '{}');
+    const arr = all[gamePk] || [];
+    arr.push({ ts: Date.now(), homeProb });
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+    all[gamePk] = arr.filter(s => s.ts >= cutoff).slice(-200);
+    localStorage.setItem(key, JSON.stringify(all));
+  } catch (e) { /* storage unavailable — skip silently */ }
+}
+
+function getKalshiMovement(gamePk, currentHomeProb) {
+  try {
+    const all = JSON.parse(localStorage.getItem('kalshiSnapshots') || '{}');
+    const arr = all[gamePk] || [];
+    if (!arr.length) return null;
+    const cutoff = Date.now() - 3 * 60 * 60 * 1000; // look back up to 3 hours
+    const relevant = arr.filter(s => s.ts >= cutoff);
+    const earliest = relevant.length ? relevant[0] : arr[0];
+    const delta = currentHomeProb - earliest.homeProb;
+    if (Math.abs(delta) < 0.01) return null; // negligible movement, not worth showing
+    const minutesAgo = Math.round((Date.now() - earliest.ts) / 60000);
+    if (minutesAgo < 1) return null; // need at least a little time between snapshots to mean anything
+    return { delta, minutesAgo };
+  } catch (e) {
+    return null;
+  }
+}
+
 function readableTextColor(hexColor) {
   const hex = hexColor.replace('#', '');
   const r = parseInt(hex.substring(0, 2), 16);
@@ -1010,7 +1053,7 @@ async function renderMatchup(gamePk) {
   const homePitcher = game.teams.home.probablePitcher;
 
   try {
-    const [awayRec, homeRec, awayERA, homeERA, weather, awayWorkload, homeWorkload, h2h, lineup, awayMoves, homeMoves, kalshiML, kalshiRL, kalshiTotal] = await Promise.all([
+    const [awayRec, homeRec, awayERA, homeERA, weather, awayWorkload, homeWorkload, h2h, lineup, awayMoves, homeMoves, kalshiML, kalshiRL, kalshiTotal, awayContext, homeContext] = await Promise.all([
       getStandingsRecord(awayTeam.id, season),
       getStandingsRecord(homeTeam.id, season),
       getPitcherERA(awayPitcher && awayPitcher.id, season),
@@ -1024,7 +1067,9 @@ async function renderMatchup(gamePk) {
       getRecentTransactions(homeTeam.id),
       getKalshiOdds(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME'),
       getKalshiRunLine(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME'),
-      getKalshiTotal(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME')
+      getKalshiTotal(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME'),
+      getTeamContext(awayTeam.id, awayPitcher && awayPitcher.id, game.gameDate, game.venue && game.venue.id),
+      getTeamContext(homeTeam.id, homePitcher && homePitcher.id, game.gameDate, game.venue && game.venue.id)
     ]);
 
     const { homeWinProb: baseHomeWinProb } = computeBaseWinProb(awayRec, homeRec);
@@ -1061,6 +1106,12 @@ async function renderMatchup(gamePk) {
       homeWinProb = homeWinProb * 0.6 + kalshiHomeProb * 0.4;
     }
 
+    let kalshiMovement = null;
+    if (kalshiHomeProb !== null) {
+      recordKalshiSnapshot(gamePk, kalshiHomeProb);
+      kalshiMovement = getKalshiMovement(gamePk, kalshiHomeProb);
+    }
+
     const awayWinProb = 1 - homeWinProb;
     const homePctDisplay = Math.round(homeWinProb * 100);
     const awayPctDisplay = 100 - homePctDisplay;
@@ -1081,6 +1132,40 @@ async function renderMatchup(gamePk) {
       projection.expectedAwayRuns += homeFatigueRuns;
       projection.expectedMargin = projection.expectedHomeRuns - projection.expectedAwayRuns;
       projection.expectedTotal += awayFatigueRuns + homeFatigueRuns;
+    }
+
+    // Starting pitcher rest: a starter on short rest (3 or fewer days since their last start,
+    // vs. the normal 4-5 day gap) tends to be less effective, so the opponent gets a small bump.
+    function restPenaltyRuns(context) {
+      if (!context || context.pitcherRestDays === null || context.pitcherRestDays === undefined) return 0;
+      return context.pitcherRestDays <= 3 ? 0.15 : 0;
+    }
+    const awayRestPenalty = restPenaltyRuns(awayContext);
+    const homeRestPenalty = restPenaltyRuns(homeContext);
+    if (projection && (awayRestPenalty > 0 || homeRestPenalty > 0)) {
+      projection.expectedHomeRuns += awayRestPenalty;
+      projection.expectedAwayRuns += homeRestPenalty;
+      projection.expectedMargin = projection.expectedHomeRuns - projection.expectedAwayRuns;
+      projection.expectedTotal += awayRestPenalty + homeRestPenalty;
+    }
+
+    // Travel & jet lag: long distance and/or multiple time zones since the last game tends to
+    // slightly suppress a team's own offense. Direction of travel isn't factored in (some
+    // research suggests west-to-east is worse), just magnitude — kept simple and capped.
+    function travelPenaltyRuns(context) {
+      if (!context) return 0;
+      let penalty = 0;
+      if (context.travelMiles && context.travelMiles > 1500) penalty += 0.08;
+      if (context.timezoneShiftHours && Math.abs(context.timezoneShiftHours) >= 2) penalty += 0.08;
+      return Math.min(0.15, penalty);
+    }
+    const awayTravelPenalty = travelPenaltyRuns(awayContext);
+    const homeTravelPenalty = travelPenaltyRuns(homeContext);
+    if (projection && (awayTravelPenalty > 0 || homeTravelPenalty > 0)) {
+      projection.expectedAwayRuns -= awayTravelPenalty;
+      projection.expectedHomeRuns -= homeTravelPenalty;
+      projection.expectedMargin = projection.expectedHomeRuns - projection.expectedAwayRuns;
+      projection.expectedTotal -= (awayTravelPenalty + homeTravelPenalty);
     }
 
     let tempAdjustment = 0;
@@ -1162,6 +1247,7 @@ async function renderMatchup(gamePk) {
             <div class="home" id="homePctBar" style="width:${homePctDisplay}%"></div>
           </div>
           <div class="probbar-caption" id="probCaption">Chance to win — based on team strength, recent form, ballpark, today's starters${kalshiHomeProb !== null ? ', and live Kalshi market pricing (auto-updates every 20s)' : ''}${h2h && h2h.gamesPlayed > 0 ? `<br>Season series: ${awayTeam.abbreviation || 'Away'} ${h2h.wins}-${h2h.losses} vs ${homeTeam.abbreviation || 'Home'}${h2h.gamesPlayed < 3 ? ' (too few games to count yet)' : ''}` : ''}</div>
+          <div id="kalshiMovement" style="text-align:center; font-size:11px; color:var(--accent); margin-top:6px;">${kalshiMovement ? `Kalshi line moved ${Math.abs(Math.round(kalshiMovement.delta * 100))}pt toward ${kalshiMovement.delta > 0 ? homeAbbrForKalshi : awayAbbrForKalshi} over the last ${kalshiMovement.minutesAgo} min` : ''}</div>
         </div>
 
         <div class="bet-tabs">
@@ -1247,6 +1333,19 @@ async function renderMatchup(gamePk) {
                 <span class="chip">${awayTeam.abbreviation || 'Away'} ${awayWorkload ? awayWorkload.gamesInLast3Days + ' games' + (awayWorkload.doubleHeaderRecently ? ' + dbl-header' : '') : '—'}</span>
                 <span class="chip">${homeTeam.abbreviation || 'Home'} ${homeWorkload ? homeWorkload.gamesInLast3Days + ' games' + (homeWorkload.doubleHeaderRecently ? ' + dbl-header' : '') : '—'}</span>
               </div>
+            </div>
+            ` : ''}
+
+            ${(awayContext || homeContext) ? `
+            <div class="detail-block">
+              <div class="detail-title">Starter rest &amp; travel</div>
+              <div class="chip-row">
+                ${awayContext && awayContext.pitcherRestDays != null ? `<span class="chip ${awayContext.pitcherRestDays <= 3 ? 'chip-out' : ''}">${awayTeam.abbreviation} starter: ${awayContext.pitcherRestDays}d rest</span>` : ''}
+                ${homeContext && homeContext.pitcherRestDays != null ? `<span class="chip ${homeContext.pitcherRestDays <= 3 ? 'chip-out' : ''}">${homeTeam.abbreviation} starter: ${homeContext.pitcherRestDays}d rest</span>` : ''}
+                ${awayContext && awayContext.travelMiles ? `<span class="chip ${awayContext.travelMiles > 1500 ? 'chip-out' : ''}">${awayTeam.abbreviation} traveled ${awayContext.travelMiles}mi${awayContext.timezoneShiftHours ? ` (~${Math.abs(awayContext.timezoneShiftHours)}tz)` : ''}</span>` : ''}
+                ${homeContext && homeContext.travelMiles ? `<span class="chip ${homeContext.travelMiles > 1500 ? 'chip-out' : ''}">${homeTeam.abbreviation} traveled ${homeContext.travelMiles}mi${homeContext.timezoneShiftHours ? ` (~${Math.abs(homeContext.timezoneShiftHours)}tz)` : ''}</span>` : ''}
+              </div>
+              <div style="font-size:10.5px; color:var(--ink-soft); margin-top:6px;">Short rest (≤3 days) and long travel/timezone shifts get small, capped nudges in run line &amp; total — not moneyline directly.</div>
             </div>
             ` : ''}
 
@@ -1628,6 +1727,9 @@ async function refreshLiveProbability() {
   }
   if (kalshiHomeProb === null) return; // no fresh price — leave the displayed number as-is
 
+  recordKalshiSnapshot(gamePk, kalshiHomeProb);
+  const movement = getKalshiMovement(gamePk, kalshiHomeProb);
+
   const homeWinProb = baseHomeWinProb * 0.6 + kalshiHomeProb * 0.4;
   const awayWinProb = 1 - homeWinProb;
   const homePctDisplay = Math.round(homeWinProb * 100);
@@ -1637,10 +1739,16 @@ async function refreshLiveProbability() {
   const homePctNum = document.getElementById('homePctNum');
   const awayPctBar = document.getElementById('awayPctBar');
   const homePctBar = document.getElementById('homePctBar');
+  const movementEl = document.getElementById('kalshiMovement');
   if (awayPctNum) awayPctNum.textContent = `${awayPctDisplay}%`;
   if (homePctNum) homePctNum.textContent = `${homePctDisplay}%`;
   if (awayPctBar) awayPctBar.style.width = `${awayPctDisplay}%`;
   if (homePctBar) homePctBar.style.width = `${homePctDisplay}%`;
+  if (movementEl) {
+    movementEl.textContent = movement
+      ? `Kalshi line moved ${Math.abs(Math.round(movement.delta * 100))}pt toward ${movement.delta > 0 ? homeAbbr : awayAbbr} over the last ${movement.minutesAgo} min`
+      : '';
+  }
 }
 
 setInterval(refreshLiveProbability, 20000);
