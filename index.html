@@ -153,7 +153,7 @@
 </main>
 
 <footer>
-  Model is a simplified estimate from team win %, recent form, and starting pitcher ERA — it is not a guarantee and doesn't account for everything a sportsbook prices in (weather, bullpen usage, lineup changes, injuries not yet reflected in stats, etc). Use it as one input, not the whole decision. Bet only what you can afford to lose.
+  Model blends run differential (Pythagorean win expectation), season record, home/away-specific record, recent form, and starting pitcher ERA — it is not a guarantee and doesn't account for everything a sportsbook prices in (weather, bullpen usage, lineup changes, injuries not yet reflected in stats, etc). Use it as one input, not the whole decision. Bet only what you can afford to lose.
 </footer>
 
 <script>
@@ -275,11 +275,41 @@ function log5(pctA, pctB) {
 }
 
 function pctFromRecord(rec) {
-  if (!rec) return 0.5;
+  if (!rec) return null;
   const w = parseInt(rec.leagueRecord?.wins ?? 0);
   const l = parseInt(rec.leagueRecord?.losses ?? 0);
-  if (w + l === 0) return 0.5;
+  if (w + l === 0) return null;
   return w / (w + l);
+}
+
+function splitPct(rec, type) {
+  const s = rec && (rec.records?.splitRecords || []).find(r => r.type === type);
+  if (!s) return null;
+  const total = s.wins + s.losses;
+  if (total === 0) return null;
+  return s.wins / total;
+}
+
+function pythPct(rec) {
+  if (!rec) return null;
+  const rs = Number(rec.runsScored);
+  const ra = Number(rec.runsAllowed);
+  if (!rs || !ra) return null;
+  const rs2 = Math.pow(rs, 1.83);
+  const ra2 = Math.pow(ra, 1.83);
+  return rs2 / (rs2 + ra2);
+}
+
+function blendPct(overall, pyth, split, l10) {
+  let weightSum = 0, valueSum = 0;
+  const add = (val, w) => {
+    if (val !== null && val !== undefined && !isNaN(val)) { valueSum += val * w; weightSum += w; }
+  };
+  add(overall, 0.20);
+  add(pyth, 0.45);
+  add(split, 0.20);
+  add(l10, 0.15);
+  return weightSum > 0 ? valueSum / weightSum : 0.5;
 }
 
 function last10Pct(rec) {
@@ -311,16 +341,17 @@ async function renderMatchup(gamePk) {
       getPitcherERA(homePitcher && homePitcher.id, season)
     ]);
 
-    let awayPct = pctFromRecord(awayRec);
-    let homePct = pctFromRecord(homeRec);
-
+    const awayOverall = pctFromRecord(awayRec);
+    const homeOverall = pctFromRecord(homeRec);
+    const awayPyth = pythPct(awayRec);
+    const homePyth = pythPct(homeRec);
+    const awaySplit = splitPct(awayRec, 'away');
+    const homeSplit = splitPct(homeRec, 'home');
     const awayL10 = last10Pct(awayRec);
     const homeL10 = last10Pct(homeRec);
-    if (awayL10 !== null) awayPct = awayPct * 0.75 + awayL10 * 0.25;
-    if (homeL10 !== null) homePct = homePct * 0.75 + homeL10 * 0.25;
 
-    homePct = Math.min(0.97, homePct + 0.03);
-    awayPct = Math.max(0.03, awayPct - 0.01);
+    const awayPct = blendPct(awayOverall, awayPyth, awaySplit, awayL10);
+    const homePct = blendPct(homeOverall, homePyth, homeSplit, homeL10);
 
     let homeWinProb = log5(homePct, awayPct);
 
@@ -351,7 +382,7 @@ async function renderMatchup(gamePk) {
           ${statusLabel(game)}
         </div>
         <div class="probbar-wrap">
-          <div class="probbar-label"><span>Model win probability</span><span>Log5 + form + starter ERA</span></div>
+          <div class="probbar-label"><span>Model win probability</span><span>Run diff · splits · form · ERA</span></div>
           <div class="probbar">
             <div class="away" style="width:${awayPctDisplay}%"></div>
             <div class="home" style="width:${homePctDisplay}%"></div>
