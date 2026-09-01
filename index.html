@@ -387,7 +387,15 @@ async function fetchJSON(url) {
 async function loadGames() {
   const container = document.getElementById('gamesContainer');
   const matchupContainer = document.getElementById('matchupContainer');
+
+  // matchupContainer may have been moved inside the games list (dropped under a row);
+  // relocate it back out before we wipe the list, or it'd be destroyed along with it.
+  if (matchupContainer.parentElement === container) {
+    container.insertAdjacentElement('afterend', matchupContainer);
+  }
   matchupContainer.innerHTML = '';
+  openGameId = null;
+
   document.getElementById('dateLabel').textContent = fmtDateLabel(currentDate);
   container.className = 'status';
   container.textContent = "Loading games…";
@@ -413,7 +421,7 @@ async function loadGames() {
       const away = g.teams.away.team.name;
       const home = g.teams.home.team.name;
       row.innerHTML = `<span class="teams">${away} @ ${home}</span><span class="time">${statusLabel(g)}</span>`;
-      row.addEventListener('click', () => selectGame(g.gamePk));
+      row.addEventListener('click', () => selectGame(g.gamePk, row));
       container.appendChild(row);
     });
   } catch (err) {
@@ -422,10 +430,29 @@ async function loadGames() {
   }
 }
 
-function selectGame(gamePk) {
+let openGameId = null;
+
+function selectGame(gamePk, rowEl) {
+  const matchupEl = document.getElementById('matchupContainer');
+
+  // Tapping the already-open game collapses it instead of re-rendering.
+  if (String(openGameId) === String(gamePk)) {
+    openGameId = null;
+    matchupEl.innerHTML = '';
+    document.querySelectorAll('.game-row').forEach(el => el.classList.remove('active'));
+    return;
+  }
+
+  openGameId = gamePk;
   document.querySelectorAll('.game-row').forEach(el => {
     el.classList.toggle('active', String(el.dataset.gameId) === String(gamePk));
   });
+
+  if (rowEl) {
+    rowEl.insertAdjacentElement('afterend', matchupEl);
+    rowEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
   renderMatchup(gamePk);
 }
 
@@ -1088,13 +1115,6 @@ document.getElementById('nextDay').addEventListener('click', () => {
   loadGames();
 });
 
-let selectedGameId = null;
-const originalSelectGame = selectGame;
-selectGame = function(gamePk) {
-  selectedGameId = gamePk;
-  originalSelectGame(gamePk);
-};
-
 async function refreshLiveScores() {
   try {
     const dateStr = fmtDate(currentDate);
@@ -1111,8 +1131,8 @@ async function refreshLiveScores() {
       }
     });
 
-    if (selectedGameId) {
-      const g = freshGames.find(x => String(x.gamePk) === String(selectedGameId));
+    if (openGameId) {
+      const g = freshGames.find(x => String(x.gamePk) === String(openGameId));
       const statusEl = document.getElementById('liveStatus');
       if (g && statusEl) statusEl.innerHTML = statusLabel(g);
     }
