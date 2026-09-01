@@ -519,6 +519,22 @@ async function getRecentTransactions(teamId) {
   }
 }
 
+async function getKalshiOdds(awayAbbr, homeAbbr) {
+  try {
+    return await fetchJSON(`/api/kalshi-odds?away=${awayAbbr}&home=${homeAbbr}`);
+  } catch (e) {
+    return null;
+  }
+}
+
+function probToAmerican(p) {
+  if (p <= 0 || p >= 1) return null;
+  if (p >= 0.5) {
+    return Math.round(-100 * p / (1 - p));
+  }
+  return Math.round(100 * (1 - p) / p);
+}
+
 async function getPitcherERA(pitcherId, season) {
   if (!pitcherId) return null;
   try {
@@ -861,7 +877,8 @@ async function renderMatchup(gamePk) {
         </div>
 
         <div class="bet-panel" id="panel-moneyline">
-          <p class="plain-hint">Pick who wins. Type in the odds from your book — we'll tell you the implied chance those odds represent, and whether our estimate is higher or lower ("edge").</p>
+          <p class="plain-hint">Pick who wins. Type in the odds from your book — we'll tell you the implied chance those odds represent, and whether our estimate is higher or lower ("edge"). Or pull live odds from Kalshi instead of typing your own.</p>
+          <button class="log-bet-btn" id="kalshiBtn" style="margin-bottom:12px;">Get live Kalshi odds</button>
           <div class="odds-row">
             <div class="odds-field"><label>${awayTeam.abbreviation || 'Away'} odds</label><input type="text" id="awayOdds" placeholder="e.g. +130"></div>
             <div class="odds-field"><label>${homeTeam.abbreviation || 'Home'} odds</label><input type="text" id="homeOdds" placeholder="e.g. -150"></div>
@@ -983,6 +1000,38 @@ async function renderMatchup(gamePk) {
     const compute = () => computeEdge(awayInput.value, homeInput.value, awayWinProb, homeWinProb, awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME');
     awayInput.addEventListener('input', compute);
     homeInput.addEventListener('input', compute);
+
+    const kalshiBtn = document.getElementById('kalshiBtn');
+    kalshiBtn.addEventListener('click', async () => {
+      kalshiBtn.textContent = 'Checking Kalshi…';
+      kalshiBtn.disabled = true;
+      const k = await getKalshiOdds(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME');
+      if (!k || !k.available) {
+        kalshiBtn.textContent = 'No Kalshi market found for this game';
+        setTimeout(() => { kalshiBtn.textContent = 'Get live Kalshi odds'; kalshiBtn.disabled = false; }, 2500);
+        return;
+      }
+      const homeAbbr = homeTeam.abbreviation || 'HOME';
+      const awayAbbr = awayTeam.abbreviation || 'AWAY';
+      let homeProb, awayProb;
+      if (k.yesTeam === homeAbbr) {
+        homeProb = k.yesProb; awayProb = 1 - k.yesProb;
+      } else if (k.yesTeam === awayAbbr) {
+        awayProb = k.yesProb; homeProb = 1 - k.yesProb;
+      } else {
+        kalshiBtn.textContent = "Found a market but couldn't match teams";
+        setTimeout(() => { kalshiBtn.textContent = 'Get live Kalshi odds'; kalshiBtn.disabled = false; }, 2500);
+        return;
+      }
+      const homeOddsVal = probToAmerican(homeProb);
+      const awayOddsVal = probToAmerican(awayProb);
+      awayInput.value = awayOddsVal > 0 ? `+${awayOddsVal}` : `${awayOddsVal}`;
+      homeInput.value = homeOddsVal > 0 ? `+${homeOddsVal}` : `${homeOddsVal}`;
+      compute();
+      kalshiBtn.textContent = 'Updated from Kalshi ✓';
+      kalshiBtn.disabled = false;
+      setTimeout(() => { kalshiBtn.textContent = 'Get live Kalshi odds'; }, 2500);
+    });
 
     if (projection) {
       const runLineNumInput = document.getElementById('runLineNum');
