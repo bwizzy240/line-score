@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Line Score — MLB Probability Tool</title>
+<style>
+  :root {
+    --field: #234D34;
+    --field-dark: #16321F;
+    --chalk: #F4F1E6;
+    --dirt: #B5744A;
+    --amber: #E0982E;
+    --ink: #1C2620;
+    --ink-soft: #55635A;
+    --line: #D8D2C0;
+    --card: #FFFFFF;
+    --neg: #A6432F;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--chalk);
+    color: var(--ink);
+    font-family: 'Courier New', ui-monospace, monospace;
+    padding-bottom: 40px;
+  }
+  header {
+    background: var(--field);
+    color: var(--chalk);
+    padding: 22px 18px 20px;
+    border-bottom: 6px solid var(--dirt);
+  }
+  header h1 {
+    margin: 0;
+    font-family: 'Arial Narrow', 'Helvetica Neue', sans-serif;
+    font-weight: 800;
+    font-size: 28px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  header p {
+    margin: 6px 0 0;
+    font-size: 13px;
+    color: #C9D9CB;
+    max-width: 46ch;
+    line-height: 1.5;
+  }
+  .datebar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    background: var(--field-dark);
+  }
+  .datebar button {
+    background: none;
+    border: 1px solid #4A6C55;
+    color: var(--chalk);
+    font-family: inherit;
+    font-size: 18px;
+    width: 34px;
+    height: 34px;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .datebar span { color: var(--chalk); font-size: 14px; letter-spacing: 0.5px; }
+  main { padding: 16px; max-width: 640px; margin: 0 auto; }
+  .status { text-align: center; color: var(--ink-soft); padding: 30px 10px; font-size: 14px; }
+  .games { display: flex; flex-direction: column; gap: 8px; margin-bottom: 22px; }
+  .game-row {
+    background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--field);
+    border-radius: 3px; padding: 12px 14px; cursor: pointer;
+    display: flex; justify-content: space-between; align-items: center; font-size: 14px;
+  }
+  .game-row.active { border-left-color: var(--amber); background: #FFFBF2; }
+  .game-row .teams { font-weight: bold; }
+  .game-row .time { color: var(--ink-soft); font-size: 12px; }
+  .matchup { background: var(--card); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+  .scoreboard {
+    background: var(--field); color: var(--chalk); padding: 18px;
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px;
+  }
+  .scoreboard .team { text-align: center; }
+  .scoreboard .team .name {
+    font-family: 'Arial Narrow', sans-serif; font-weight: 800; font-size: 17px;
+    text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .scoreboard .team .record { font-size: 12px; color: #C9D9CB; margin-top: 3px; }
+  .scoreboard .at { font-size: 12px; color: #9FB6A6; }
+  .probbar-wrap { padding: 18px; border-bottom: 1px solid var(--line); }
+  .probbar-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-soft); margin-bottom: 6px; }
+  .probbar { height: 26px; border-radius: 3px; overflow: hidden; display: flex; border: 1px solid var(--line); }
+  .probbar .away { background: var(--dirt); }
+  .probbar .home { background: var(--field); }
+  .probbar-nums { display: flex; justify-content: space-between; margin-top: 6px; font-weight: bold; font-size: 15px; }
+  .pitchers {
+    padding: 14px 18px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--ink-soft);
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  }
+  .pitchers .label { color: var(--ink); font-weight: bold; margin-bottom: 2px; }
+  .odds-section { padding: 18px; }
+  .odds-section h3 {
+    margin: 0 0 4px; font-family: 'Arial Narrow', sans-serif;
+    font-size: 15px; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .odds-section .hint { font-size: 12px; color: var(--ink-soft); margin: 0 0 14px; line-height: 1.5; }
+  .odds-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .odds-field label {
+    display: block; font-size: 11px; text-transform: uppercase; color: var(--ink-soft);
+    margin-bottom: 4px; letter-spacing: 0.4px;
+  }
+  .odds-field input {
+    width: 100%; padding: 10px; font-family: inherit; font-size: 15px;
+    border: 1px solid var(--line); border-radius: 3px; background: var(--chalk); color: var(--ink);
+  }
+  .odds-field input:focus { outline: 2px solid var(--amber); outline-offset: -1px; }
+  .result { margin-top: 6px; border-top: 2px dashed var(--line); padding-top: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .result .col { text-align: center; padding: 10px 6px; border-radius: 3px; background: var(--chalk); border: 1px solid var(--line); }
+  .result .col.edge-pos { background: #FDF3E0; border-color: var(--amber); }
+  .result .col.edge-neg { background: #FBEEEC; border-color: var(--neg); }
+  .result .team-abbr { font-size: 11px; color: var(--ink-soft); text-transform: uppercase; }
+  .result .implied { font-size: 20px; font-weight: bold; margin: 4px 0 2px; }
+  .result .edge { font-size: 12px; }
+  .result .edge.pos { color: #8A5C1F; font-weight: bold; }
+  .result .edge.neg { color: var(--neg); }
+  footer {
+    max-width: 60ch; margin: 26px auto 0; padding: 0 18px;
+    font-size: 11.5px; color: var(--ink-soft); line-height: 1.6; text-align: center;
+  }
+  .error-box {
+    background: #FBEEEC; border: 1px solid var(--neg); color: var(--neg);
+    padding: 14px; border-radius: 3px; font-size: 13px; margin-bottom: 16px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Line Score</h1>
+  <p>Pulls live MLB team &amp; pitcher data to estimate a win probability for each matchup, then compares it against odds you enter.</p>
+</header>
+
+<div class="datebar">
+  <button id="prevDay">‹</button>
+  <span id="dateLabel">Loading…</span>
+  <button id="nextDay">›</button>
+</div>
+
+<main>
+  <div id="gamesContainer" class="status">Loading today's games…</div>
+  <div id="matchupContainer"></div>
+</main>
+
+<footer>
+  Model is a simplified estimate from team win %, recent form, and starting pitcher ERA — it is not a guarantee and doesn't account for everything a sportsbook prices in (weather, bullpen usage, lineup changes, injuries not yet reflected in stats, etc). Use it as one input, not the whole decision. Bet only what you can afford to lose.
+</footer>
+
+<script>
+let currentDate = new Date();
+let gamesCache = [];
+
+function fmtDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function fmtDateLabel(d) {
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+async function fetchJSON(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  return res.json();
+}
+
+async function loadGames() {
+  const container = document.getElementById('gamesContainer');
+  const matchupContainer = document.getElementById('matchupContainer');
+  matchupContainer.innerHTML = '';
+  document.getElementById('dateLabel').textContent = fmtDateLabel(currentDate);
+  container.className = 'status';
+  container.textContent = "Loading games…";
+
+  try {
+    const dateStr = fmtDate(currentDate);
+    const data = await fetchJSON(`/api/schedule?date=${dateStr}`);
+    const dates = data.dates || [];
+    const games = dates.length ? dates[0].games : [];
+    gamesCache = games;
+
+    if (!games.length) {
+      container.textContent = "No MLB games scheduled this day.";
+      return;
+    }
+
+    container.className = 'games';
+    container.innerHTML = '';
+    games.forEach(g => {
+      const row = document.createElement('div');
+      row.className = 'game-row';
+      row.dataset.gameId = g.gamePk;
+      const away = g.teams.away.team.name;
+      const home = g.teams.home.team.name;
+      const time = new Date(g.gameDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+      row.innerHTML = `<span class="teams">${away} @ ${home}</span><span class="time">${time}</span>`;
+      row.addEventListener('click', () => selectGame(g.gamePk));
+      container.appendChild(row);
+    });
+  } catch (err) {
+    container.className = 'status';
+    container.innerHTML = `<div class="error-box">Couldn't load games: ${err.message}. Try again or pick another date.</div>`;
+  }
+}
+
+function selectGame(gamePk) {
+  document.querySelectorAll('.game-row').forEach(el => {
+    el.classList.toggle('active', String(el.dataset.gameId) === String(gamePk));
+  });
+  renderMatchup(gamePk);
+}
+
+async function getStandingsRecord(teamId, season) {
+  const data = await fetchJSON(`/api/standings?season=${season}`);
+  for (const rec of data.records) {
+    for (const t of rec.teamRecords) {
+      if (t.team.id === teamId) return t;
+    }
+  }
+  return null;
+}
+
+async function getPitcherERA(pitcherId, season) {
+  if (!pitcherId) return null;
+  try {
+    const data = await fetchJSON(`/api/pitcher?id=${pitcherId}&season=${season}`);
+    const splits = data.stats && data.stats[0] && data.stats[0].splits;
+    if (splits && splits.length) {
+      const s = splits[0].stat;
+      return { era: parseFloat(s.era), ip: parseFloat(s.inningsPitched), whip: parseFloat(s.whip) };
+    }
+  } catch (e) {}
+  return null;
+}
+
+function log5(pctA, pctB) {
+  const num = pctA - pctA * pctB;
+  const den = pctA + pctB - 2 * pctA * pctB;
+  if (den === 0) return 0.5;
+  return num / den;
+}
+
+function pctFromRecord(rec) {
+  if (!rec) return 0.5;
+  const w = parseInt(rec.leagueRecord?.wins ?? 0);
+  const l = parseInt(rec.leagueRecord?.losses ?? 0);
+  if (w + l === 0) return 0.5;
+  return w / (w + l);
+}
+
+function last10Pct(rec) {
+  const l10 = rec && (rec.records?.splitRecords || []).find(r => r.type === 'lastTen');
+  if (!l10) return null;
+  const total = l10.wins + l10.losses;
+  if (total === 0) return null;
+  return l10.wins / total;
+}
+
+async function renderMatchup(gamePk) {
+  const el = document.getElementById('matchupContainer');
+  el.innerHTML = '<div class="status">Crunching numbers…</div>';
+
+  const game = gamesCache.find(g => g.gamePk === gamePk);
+  if (!game) return;
+
+  const season = new Date(game.gameDate).getFullYear();
+  const awayTeam = game.teams.away.team;
+  const homeTeam = game.teams.home.team;
+  const awayPitcher = game.teams.away.probablePitcher;
+  const homePitcher = game.teams.home.probablePitcher;
+
+  try {
+    const [awayRec, homeRec, awayERA, homeERA] = await Promise.all([
+      getStandingsRecord(awayTeam.id, season),
+      getStandingsRecord(homeTeam.id, season),
+      getPitcherERA(awayPitcher && awayPitcher.id, season),
+      getPitcherERA(homePitcher && homePitcher.id, season)
+    ]);
+
+    let awayPct = pctFromRecord(awayRec);
+    let homePct = pctFromRecord(homeRec);
+
+    const awayL10 = last10Pct(awayRec);
+    const homeL10 = last10Pct(homeRec);
+    if (awayL10 !== null) awayPct = awayPct * 0.75 + awayL10 * 0.25;
+    if (homeL10 !== null) homePct = homePct * 0.75 + homeL10 * 0.25;
+
+    homePct = Math.min(0.97, homePct + 0.03);
+    awayPct = Math.max(0.03, awayPct - 0.01);
+
+    let homeWinProb = log5(homePct, awayPct);
+
+    if (awayERA && homeERA && awayERA.ip > 15 && homeERA.ip > 15) {
+      const diff = awayERA.era - homeERA.era;
+      const shift = Math.max(-0.08, Math.min(0.08, diff * 0.025));
+      homeWinProb = Math.min(0.95, Math.max(0.05, homeWinProb + shift));
+    }
+
+    const awayWinProb = 1 - homeWinProb;
+    const homePctDisplay = Math.round(homeWinProb * 100);
+    const awayPctDisplay = 100 - homePctDisplay;
+
+    el.innerHTML = `
+      <div class="matchup">
+        <div class="scoreboard">
+          <div class="team">
+            <div class="name">${awayTeam.name}</div>
+            <div class="record">${awayRec ? awayRec.leagueRecord.wins + '-' + awayRec.leagueRecord.losses : '—'}</div>
+          </div>
+          <div class="at">@</div>
+          <div class="team">
+            <div class="name">${homeTeam.name}</div>
+            <div class="record">${homeRec ? homeRec.leagueRecord.wins + '-' + homeRec.leagueRecord.losses : '—'}</div>
+          </div>
+        </div>
+        <div class="probbar-wrap">
+          <div class="probbar-label"><span>Model win probability</span><span>Log5 + form + starter ERA</span></div>
+          <div class="probbar">
+            <div class="away" style="width:${awayPctDisplay}%"></div>
+            <div class="home" style="width:${homePctDisplay}%"></div>
+          </div>
+          <div class="probbar-nums"><span>${awayPctDisplay}%</span><span>${homePctDisplay}%</span></div>
+        </div>
+        <div class="pitchers">
+          <div>
+            <div class="label">${awayPitcher ? awayPitcher.fullName : 'TBD'}</div>
+            ${awayERA ? `ERA ${awayERA.era.toFixed(2)} · WHIP ${awayERA.whip}` : 'No stats yet'}
+          </div>
+          <div>
+            <div class="label">${homePitcher ? homePitcher.fullName : 'TBD'}</div>
+            ${homeERA ? `ERA ${homeERA.era.toFixed(2)} · WHIP ${homeERA.whip}` : 'No stats yet'}
+          </div>
+        </div>
+        <div class="odds-section">
+          <h3>Compare to your odds</h3>
+          <p class="hint">Enter the moneyline odds you see on your book/app (American format, e.g. -150 or +130) to see the implied probability and whether the model sees an edge.</p>
+          <div class="odds-row">
+            <div class="odds-field"><label>${awayTeam.abbreviation || 'Away'} odds</label><input type="text" id="awayOdds" placeholder="e.g. +130"></div>
+            <div class="odds-field"><label>${homeTeam.abbreviation || 'Home'} odds</label><input type="text" id="homeOdds" placeholder="e.g. -150"></div>
+          </div>
+          <div id="resultBox"></div>
+        </div>
+      </div>
+    `;
+
+    const awayInput = document.getElementById('awayOdds');
+    const homeInput = document.getElementById('homeOdds');
+    const compute = () => computeEdge(awayInput.value, homeInput.value, awayWinProb, homeWinProb, awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME');
+    awayInput.addEventListener('input', compute);
+    homeInput.addEventListener('input', compute);
+
+  } catch (err) {
+    el.innerHTML = `<div class="error-box">Couldn't compute this matchup: ${err.message}</div>`;
+  }
+}
+
+function americanToImplied(odds) {
+  const n = parseFloat(odds);
+  if (isNaN(n) || n === 0) return null;
+  if (n > 0) return 100 / (n + 100);
+  return -n / (-n + 100);
+}
+
+function computeEdge(awayOddsStr, homeOddsStr, awayModelProb, homeModelProb, awayAbbr, homeAbbr) {
+  const box = document.getElementById('resultBox');
+  const awayImplied = americanToImplied(awayOddsStr);
+  const homeImplied = americanToImplied(homeOddsStr);
+  if (awayImplied === null && homeImplied === null) { box.innerHTML = ''; return; }
+
+  function colHTML(abbr, implied, modelProb) {
+    if (implied === null) return `<div class="col"><div class="team-abbr">${abbr}</div><div class="implied">—</div></div>`;
+    const edge = (modelProb - implied) * 100;
+    const edgeClass = edge > 0 ? 'edge-pos' : (edge < 0 ? 'edge-neg' : '');
+    const edgeText = edge > 0 ? `+${edge.toFixed(1)}% model edge` : `${edge.toFixed(1)}% vs model`;
+    const edgeSpanClass = edge > 0 ? 'pos' : 'neg';
+    return `<div class="col ${edgeClass}"><div class="team-abbr">${abbr}</div><div class="implied">${(implied * 100).toFixed(1)}%</div><div class="edge ${edgeSpanClass}">${edgeText}</div></div>`;
+  }
+
+  box.innerHTML = `<div class="result">${colHTML(awayAbbr, awayImplied, awayModelProb)}${colHTML(homeAbbr, homeImplied, homeModelProb)}</div>`;
+}
+
+document.getElementById('prevDay').addEventListener('click', () => {
+  currentDate.setDate(currentDate.getDate() - 1);
+  loadGames();
+});
+document.getElementById('nextDay').addEventListener('click', () => {
+  currentDate.setDate(currentDate.getDate() + 1);
+  loadGames();
+});
+
+loadGames();
+</script>
+</body>
+</html>
