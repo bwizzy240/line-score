@@ -806,7 +806,7 @@ async function renderMatchup(gamePk) {
   const homePitcher = game.teams.home.probablePitcher;
 
   try {
-    const [awayRec, homeRec, awayERA, homeERA, weather, awayWorkload, homeWorkload, h2h, lineup, awayMoves, homeMoves, kalshiML, kalshiRL] = await Promise.all([
+    const [awayRec, homeRec, awayERA, homeERA, weather, awayWorkload, homeWorkload, h2h, lineup, awayMoves, homeMoves, kalshiML, kalshiRL, kalshiTotal] = await Promise.all([
       getStandingsRecord(awayTeam.id, season),
       getStandingsRecord(homeTeam.id, season),
       getPitcherERA(awayPitcher && awayPitcher.id, season),
@@ -819,7 +819,8 @@ async function renderMatchup(gamePk) {
       getRecentTransactions(awayTeam.id),
       getRecentTransactions(homeTeam.id),
       getKalshiOdds(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME'),
-      getKalshiRunLine(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME')
+      getKalshiRunLine(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME'),
+      getKalshiTotal(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME')
     ]);
 
     const { homeWinProb: baseHomeWinProb } = computeBaseWinProb(awayRec, homeRec);
@@ -913,7 +914,10 @@ async function renderMatchup(gamePk) {
       }
     }
 
-    const defaultTotal = projection ? (Math.round(projection.expectedTotal * 2) / 2).toFixed(1) : '';
+    let defaultTotal = projection ? (Math.round(projection.expectedTotal * 2) / 2).toFixed(1) : '';
+    if (kalshiTotal && kalshiTotal.available && kalshiTotal.lines.length) {
+      defaultTotal = kalshiTotal.lines[0].line;
+    }
 
     // Default the run line input to whatever Kalshi actually has for this game, not a fixed
     // guess of 1.5 — so blending applies automatically without needing the button first.
@@ -958,7 +962,7 @@ async function renderMatchup(gamePk) {
 
         <div class="bet-panel" id="panel-moneyline">
           <p class="plain-hint">Pick who wins. Type in the odds from your book — we'll tell you the implied chance those odds represent, and whether our estimate is higher or lower ("edge"). Or pull live odds from Kalshi instead of typing your own.</p>
-          <button class="log-bet-btn" id="kalshiBtn" style="margin-bottom:12px;">Get live Kalshi odds</button>
+          <button class="log-bet-btn" id="kalshiBtn" style="margin-bottom:12px;">Checking Kalshi…</button>
           <div class="odds-row">
             <div class="odds-field"><label>${awayTeam.abbreviation || 'Away'} odds</label><input type="text" id="awayOdds" placeholder="e.g. +130"></div>
             <div class="odds-field"><label>${homeTeam.abbreviation || 'Home'} odds</label><input type="text" id="homeOdds" placeholder="e.g. -150"></div>
@@ -969,7 +973,7 @@ async function renderMatchup(gamePk) {
         <div class="bet-panel" id="panel-runline" style="display:none;">
           <p class="plain-hint">Pick who wins by more than the line. Sportsbooks usually use ±1.5, but Kalshi's line varies by game — this defaults to whatever Kalshi actually has, so edit it to match your own book if different. ${projection ? `We project the score around ${projection.expectedHomeRuns.toFixed(1)} - ${projection.expectedAwayRuns.toFixed(1)} (home).` : "Not enough run data yet for this matchup."}</p>
           ${projection ? `
-          <button class="log-bet-btn" id="kalshiRLBtn" style="margin-bottom:12px;">Get live Kalshi run line</button>
+          <button class="log-bet-btn" id="kalshiRLBtn" style="margin-bottom:12px;">Checking Kalshi…</button>
           <div class="odds-row">
             <div class="odds-field"><label>Line (home side)</label><input type="text" id="runLineNum" value="-${defaultRunLine}" placeholder="e.g. -1.5"></div>
             <div class="odds-field"></div>
@@ -985,7 +989,7 @@ async function renderMatchup(gamePk) {
         <div class="bet-panel" id="panel-total" style="display:none;">
           <p class="plain-hint">Pick whether total runs scored lands over or under a number. ${projection ? `We project ${projection.expectedTotal.toFixed(1)} total runs${park ? ` at ${park.name}` : ''}.` : "Not enough run data yet for this matchup."}</p>
           ${projection ? `
-          <button class="log-bet-btn" id="kalshiTotalBtn" style="margin-bottom:12px;">Get live Kalshi total</button>
+          <button class="log-bet-btn" id="kalshiTotalBtn" style="margin-bottom:12px;">Checking Kalshi…</button>
           <div class="odds-row">
             <div class="odds-field"><label>Total line</label><input type="text" id="totalNum" value="${defaultTotal}" placeholder="e.g. 8.5"></div>
             <div class="odds-field"></div>
@@ -1092,14 +1096,11 @@ async function renderMatchup(gamePk) {
     homeInput.addEventListener('input', compute);
 
     const kalshiBtn = document.getElementById('kalshiBtn');
-    kalshiBtn.addEventListener('click', async () => {
-      kalshiBtn.textContent = 'Checking Kalshi…';
-      kalshiBtn.disabled = true;
-      const k = await getKalshiOdds(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME');
+    async function fillMoneylineFromKalshi(k) {
       if (!k || !k.available) {
         kalshiBtn.textContent = 'No Kalshi market found for this game';
-        setTimeout(() => { kalshiBtn.textContent = 'Get live Kalshi odds'; kalshiBtn.disabled = false; }, 2500);
-        return;
+        setTimeout(() => { kalshiBtn.textContent = 'Refresh Kalshi odds'; kalshiBtn.disabled = false; }, 2500);
+        return false;
       }
       const homeAbbr = homeTeam.abbreviation || 'HOME';
       const awayAbbr = awayTeam.abbreviation || 'AWAY';
@@ -1110,17 +1111,33 @@ async function renderMatchup(gamePk) {
         awayProb = k.yesProb; homeProb = 1 - k.yesProb;
       } else {
         kalshiBtn.textContent = "Found a market but couldn't match teams";
-        setTimeout(() => { kalshiBtn.textContent = 'Get live Kalshi odds'; kalshiBtn.disabled = false; }, 2500);
-        return;
+        setTimeout(() => { kalshiBtn.textContent = 'Refresh Kalshi odds'; kalshiBtn.disabled = false; }, 2500);
+        return false;
       }
       const homeOddsVal = probToAmerican(homeProb);
       const awayOddsVal = probToAmerican(awayProb);
       awayInput.value = awayOddsVal > 0 ? `+${awayOddsVal}` : `${awayOddsVal}`;
       homeInput.value = homeOddsVal > 0 ? `+${homeOddsVal}` : `${homeOddsVal}`;
       compute();
-      kalshiBtn.textContent = 'Updated from Kalshi ✓';
-      kalshiBtn.disabled = false;
-      setTimeout(() => { kalshiBtn.textContent = 'Get live Kalshi odds'; }, 2500);
+      return true;
+    }
+
+    if (kalshiML && kalshiML.available) {
+      fillMoneylineFromKalshi(kalshiML);
+    } else {
+      kalshiBtn.textContent = 'No Kalshi market found for this game';
+    }
+
+    kalshiBtn.addEventListener('click', async () => {
+      kalshiBtn.textContent = 'Checking Kalshi…';
+      kalshiBtn.disabled = true;
+      const k = await getKalshiOdds(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME');
+      const ok = await fillMoneylineFromKalshi(k);
+      if (ok) {
+        kalshiBtn.textContent = 'Updated from Kalshi ✓';
+        kalshiBtn.disabled = false;
+        setTimeout(() => { kalshiBtn.textContent = 'Refresh Kalshi odds'; }, 2500);
+      }
     });
 
     if (projection) {
@@ -1154,14 +1171,11 @@ async function renderMatchup(gamePk) {
       homeRLInput.addEventListener('input', computeRL);
 
       const kalshiRLBtn = document.getElementById('kalshiRLBtn');
-      kalshiRLBtn.addEventListener('click', async () => {
-        kalshiRLBtn.textContent = 'Checking Kalshi…';
-        kalshiRLBtn.disabled = true;
-        const k = kalshiRL && kalshiRL.available ? kalshiRL : await getKalshiRunLine(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME');
+      function fillRunLineFromKalshi(k) {
         if (!k || !k.available || !k.lines.length) {
           kalshiRLBtn.textContent = 'No Kalshi run line found for this game';
-          setTimeout(() => { kalshiRLBtn.textContent = 'Get live Kalshi run line'; kalshiRLBtn.disabled = false; }, 2500);
-          return;
+          setTimeout(() => { kalshiRLBtn.textContent = 'Refresh Kalshi run line'; kalshiRLBtn.disabled = false; }, 2500);
+          return false;
         }
         const line = k.lines[0]; // typically only one spread line offered per game
         const homeAbbr = homeTeam.abbreviation || 'HOME';
@@ -1171,16 +1185,32 @@ async function renderMatchup(gamePk) {
         else if (line.favoredTeam === awayAbbr) { awayProb = line.yesProb; homeProb = 1 - line.yesProb; }
         else {
           kalshiRLBtn.textContent = "Found a line but couldn't match teams";
-          setTimeout(() => { kalshiRLBtn.textContent = 'Get live Kalshi run line'; kalshiRLBtn.disabled = false; }, 2500);
-          return;
+          setTimeout(() => { kalshiRLBtn.textContent = 'Refresh Kalshi run line'; kalshiRLBtn.disabled = false; }, 2500);
+          return false;
         }
         runLineNumInput.value = `-${line.line}`;
         awayRLInput.value = probToAmerican(awayProb) > 0 ? `+${probToAmerican(awayProb)}` : `${probToAmerican(awayProb)}`;
         homeRLInput.value = probToAmerican(homeProb) > 0 ? `+${probToAmerican(homeProb)}` : `${probToAmerican(homeProb)}`;
         computeRL();
-        kalshiRLBtn.textContent = 'Updated from Kalshi ✓';
-        kalshiRLBtn.disabled = false;
-        setTimeout(() => { kalshiRLBtn.textContent = 'Get live Kalshi run line'; }, 2500);
+        return true;
+      }
+
+      if (kalshiRL && kalshiRL.available) {
+        fillRunLineFromKalshi(kalshiRL);
+      } else {
+        kalshiRLBtn.textContent = 'No Kalshi run line found for this game';
+      }
+
+      kalshiRLBtn.addEventListener('click', async () => {
+        kalshiRLBtn.textContent = 'Checking Kalshi…';
+        kalshiRLBtn.disabled = true;
+        const k = await getKalshiRunLine(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME');
+        const ok = fillRunLineFromKalshi(k);
+        if (ok) {
+          kalshiRLBtn.textContent = 'Updated from Kalshi ✓';
+          kalshiRLBtn.disabled = false;
+          setTimeout(() => { kalshiRLBtn.textContent = 'Refresh Kalshi run line'; }, 2500);
+        }
       });
 
       const totalNumInput = document.getElementById('totalNum');
@@ -1197,14 +1227,11 @@ async function renderMatchup(gamePk) {
       underInput.addEventListener('input', computeTotal);
 
       const kalshiTotalBtn = document.getElementById('kalshiTotalBtn');
-      kalshiTotalBtn.addEventListener('click', async () => {
-        kalshiTotalBtn.textContent = 'Checking Kalshi…';
-        kalshiTotalBtn.disabled = true;
-        const k = await getKalshiTotal(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME');
+      function fillTotalFromKalshi(k) {
         if (!k || !k.available || !k.lines.length) {
           kalshiTotalBtn.textContent = 'No Kalshi total found for this game';
-          setTimeout(() => { kalshiTotalBtn.textContent = 'Get live Kalshi total'; kalshiTotalBtn.disabled = false; }, 2500);
-          return;
+          setTimeout(() => { kalshiTotalBtn.textContent = 'Refresh Kalshi total'; kalshiTotalBtn.disabled = false; }, 2500);
+          return false;
         }
         const line = k.lines[0]; // typically only one total line offered per game
         const overOddsVal = probToAmerican(line.overProb);
@@ -1213,9 +1240,25 @@ async function renderMatchup(gamePk) {
         overInput.value = overOddsVal > 0 ? `+${overOddsVal}` : `${overOddsVal}`;
         underInput.value = underOddsVal > 0 ? `+${underOddsVal}` : `${underOddsVal}`;
         computeTotal();
-        kalshiTotalBtn.textContent = 'Updated from Kalshi ✓ (not blended into model)';
-        kalshiTotalBtn.disabled = false;
-        setTimeout(() => { kalshiTotalBtn.textContent = 'Get live Kalshi total'; }, 3000);
+        return true;
+      }
+
+      if (kalshiTotal && kalshiTotal.available) {
+        fillTotalFromKalshi(kalshiTotal);
+      } else {
+        kalshiTotalBtn.textContent = 'No Kalshi total found for this game';
+      }
+
+      kalshiTotalBtn.addEventListener('click', async () => {
+        kalshiTotalBtn.textContent = 'Checking Kalshi…';
+        kalshiTotalBtn.disabled = true;
+        const k = await getKalshiTotal(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME');
+        const ok = fillTotalFromKalshi(k);
+        if (ok) {
+          kalshiTotalBtn.textContent = 'Updated from Kalshi ✓ (not blended into model)';
+          kalshiTotalBtn.disabled = false;
+          setTimeout(() => { kalshiTotalBtn.textContent = 'Refresh Kalshi total'; }, 3000);
+        }
       });
     }
 
