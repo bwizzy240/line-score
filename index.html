@@ -82,10 +82,11 @@
   .date-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); margin-top: 1px; }
   main { padding: 16px; max-width: 640px; margin: 0 auto; }
   .status { text-align: center; color: var(--ink-soft); padding: 30px 10px; font-size: 14px; }
-  .games { display: flex; flex-direction: column; margin: 0 -16px 22px; }
+  .games { display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; }
   .game-row {
-    background: var(--chalk);
-    border-bottom: 1px solid var(--line);
+    background: var(--card);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 14px;
     padding: 14px 16px;
     cursor: pointer;
     display: grid;
@@ -93,10 +94,11 @@
     align-items: stretch;
     gap: 10px;
     font-size: 14px;
-    transition: background 0.1s ease;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.3);
+    transition: transform 0.1s ease, box-shadow 0.1s ease;
   }
-  .game-row:active { background: var(--card); }
-  .game-row.active { background: var(--card); box-shadow: inset 3px 0 0 var(--accent); }
+  .game-row:active { transform: scale(0.99); box-shadow: 0 2px 8px rgba(0,0,0,0.35); }
+  .game-row.active { box-shadow: 0 4px 14px rgba(0,0,0,0.35), 0 0 0 1.5px var(--accent); }
   .game-row .team-stack { display: flex; flex-direction: column; justify-content: space-around; gap: 14px; }
   .game-row .team-line { display: flex; align-items: center; gap: 10px; }
   .team-badge {
