@@ -1324,7 +1324,11 @@ async function renderMatchup(gamePk) {
     }
 
     if (kalshiML && kalshiML.available) {
-      fillMoneylineFromKalshi(kalshiML);
+      const ok = fillMoneylineFromKalshi(kalshiML);
+      if (ok) {
+        kalshiBtn.textContent = 'Live from Kalshi ✓';
+        kalshiBtn.disabled = false;
+      }
     } else {
       kalshiBtn.textContent = 'No Kalshi market found for this game';
     }
@@ -1397,7 +1401,11 @@ async function renderMatchup(gamePk) {
       }
 
       if (kalshiRL && kalshiRL.available) {
-        fillRunLineFromKalshi(kalshiRL);
+        const ok = fillRunLineFromKalshi(kalshiRL);
+        if (ok) {
+          kalshiRLBtn.textContent = 'Live from Kalshi ✓';
+          kalshiRLBtn.disabled = false;
+        }
       } else {
         kalshiRLBtn.textContent = 'No Kalshi run line found for this game';
       }
@@ -1445,7 +1453,11 @@ async function renderMatchup(gamePk) {
       }
 
       if (kalshiTotal && kalshiTotal.available) {
-        fillTotalFromKalshi(kalshiTotal);
+        const ok = fillTotalFromKalshi(kalshiTotal);
+        if (ok) {
+          kalshiTotalBtn.textContent = 'Live from Kalshi ✓ (not blended into model)';
+          kalshiTotalBtn.disabled = false;
+        }
       } else {
         kalshiTotalBtn.textContent = 'No Kalshi total found for this game';
       }
