@@ -6,22 +6,22 @@
 <title>Line Score — MLB Probability Tool</title>
 <style>
   :root {
-    --field: #1B4B4D;
-    --field-dark: #0F3132;
-    --field-light: #226467;
-    --chalk: #0A0E1C;
+    --field: #005C5C;
+    --field-dark: #003D3D;
+    --field-light: #0C7A7A;
+    --chalk: #0A2347;
     --dirt: #E08F5C;
     --dirt-light: #F0AD7C;
     --amber: #F0A83E;
-    --amber-soft: rgba(240,168,62,0.16);
+    --amber-soft: rgba(240,168,62,0.18);
     --ink: #F2F4F8;
-    --ink-soft: #8A93AC;
-    --line: rgba(255,255,255,0.09);
-    --card: #131829;
+    --ink-soft: #A9BBD1;
+    --line: rgba(255,255,255,0.14);
+    --card: #123863;
     --neg: #E15C4C;
-    --neg-soft: rgba(225,92,76,0.16);
-    --pos-soft: rgba(34,180,150,0.15);
-    --accent: #4FD8E0;
+    --neg-soft: rgba(225,92,76,0.18);
+    --pos-soft: rgba(0,196,160,0.18);
+    --accent: #2DD4C4;
   }
   * { box-sizing: border-box; }
   body {
@@ -105,8 +105,7 @@
     font-size: 10.5px; font-weight: 800; color: var(--ink);
     border: 1.5px solid rgba(255,255,255,0.18);
   }
-  .team-badge.away-badge { background: linear-gradient(135deg, var(--dirt), var(--dirt-light)); }
-  .team-badge.home-badge { background: linear-gradient(135deg, var(--field), var(--field-light)); }
+  .team-badge { box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
   .game-row .team-name { font-weight: 700; color: var(--ink); font-size: 14px; }
   .game-row .team-record { font-size: 11.5px; color: var(--ink-soft); margin-left: 6px; }
   .game-row .divider-col { width: 1px; background: var(--line); }
@@ -188,7 +187,7 @@
     font-size: 15px; font-weight: 600;
     border: 1.5px solid var(--line); border-radius: 9px; background: var(--chalk); color: var(--ink);
   }
-  .odds-field input:focus { outline: none; border-color: var(--amber); background: #1A2036; }
+  .odds-field input:focus { outline: none; border-color: var(--amber); background: #1A4570; }
   .result { margin-top: 10px; padding-top: 16px; border-top: 1px dashed var(--line); display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .result .col { text-align: center; padding: 14px 8px; border-radius: 12px; background: var(--chalk); border: 1.5px solid var(--line); }
   .result .col.edge-pos { background: var(--amber-soft); border-color: var(--amber); }
@@ -539,11 +538,11 @@ async function loadGames() {
       row.innerHTML = `
         <div class="team-stack">
           <div class="team-line">
-            <span class="team-badge away-badge">${awayTeam.abbreviation || '?'}</span>
+            <span class="team-badge" style="background:${getTeamColor(awayTeam.id)}; color:${readableTextColor(getTeamColor(awayTeam.id))};">${awayTeam.abbreviation || '?'}</span>
             <span class="team-name">${awayTeam.name}</span><span class="team-record">${awayRecStr}</span>
           </div>
           <div class="team-line">
-            <span class="team-badge home-badge">${homeTeam.abbreviation || '?'}</span>
+            <span class="team-badge" style="background:${getTeamColor(homeTeam.id)}; color:${readableTextColor(getTeamColor(homeTeam.id))};">${homeTeam.abbreviation || '?'}</span>
             <span class="team-name">${homeTeam.name}</span><span class="team-record">${homeRecStr}</span>
           </div>
         </div>
@@ -781,6 +780,55 @@ function applyParkFactor(projection, homeTeamId) {
 // Approximate long-run park factors (100 = neutral run environment) and park orientation
 // (compass bearing in degrees from home plate toward center field). These are well-established,
 // slowly-changing public reference values, not pulled from an API.
+// Real team brand colors (not logos — colors alone aren't protected the way a logo image is).
+// Where a team's primary color is navy/black (too close to this app's own dark background),
+// a brighter secondary/accent color is used instead so badges stay visually distinct.
+const TEAM_COLORS = {
+  108: '#BA0021', // LAA Angels
+  109: '#30A6DA', // ARI Diamondbacks (teal accent)
+  110: '#DF4601', // BAL Orioles
+  111: '#BD3039', // BOS Red Sox
+  112: '#0E3386', // CHC Cubs
+  113: '#C6011F', // CIN Reds
+  114: '#E31937', // CLE Guardians (red accent)
+  115: '#5B4A8A', // COL Rockies
+  116: '#FA4616', // DET Tigers (orange accent)
+  117: '#EB6E1F', // HOU Astros
+  118: '#004687', // KC Royals
+  119: '#005A9C', // LAD Dodgers
+  120: '#AB0003', // WSH Nationals
+  121: '#FF5910', // NYM Mets (orange accent)
+  133: '#EFB21E', // ATH
+  134: '#FDB827', // PIT Pirates (gold accent)
+  135: '#FFC425', // SD Padres (gold accent)
+  136: '#005C5C', // SEA Mariners
+  137: '#FD5A1E', // SF Giants
+  138: '#C41E3A', // STL Cardinals
+  139: '#8FBCE6', // TB Rays (light blue accent)
+  140: '#C0111F', // TEX Rangers
+  141: '#134A8E', // TOR Blue Jays
+  142: '#D31145', // MIN Twins (red accent)
+  143: '#E81828', // PHI Phillies
+  144: '#CE1141', // ATL Braves (red accent)
+  145: '#C4CED3', // CWS White Sox (silver accent)
+  146: '#00A3E0', // MIA Marlins
+  147: '#1C3F6E', // NYY Yankees
+  158: '#FFC52F'  // MIL Brewers (gold accent)
+};
+
+function getTeamColor(teamId) {
+  return TEAM_COLORS[teamId] || '#5B6B7A';
+}
+
+function readableTextColor(hexColor) {
+  const hex = hexColor.replace('#', '');
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? '#12253F' : '#F2F4F8';
+}
+
 const PARK_DATA = {
   108: { name: 'Angel Stadium', factor: 99, orientation: 20 },       // LAA
   109: { name: 'Chase Field', factor: 102, orientation: 20 },        // ARI (retractable)
