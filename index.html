@@ -370,7 +370,7 @@
   @media (min-width: 900px) {
     main { max-width: 1100px; padding: 24px 32px; }
     .games { gap: 14px; }
-    .game-row-pair { gap: 14px; }
+    .game-row-pair { grid-template-columns: repeat(4, 1fr); gap: 14px; }
     .game-row { padding: 16px 14px; border-radius: 16px; gap: 10px; }
     .team-badge { width: 30px; height: 30px; font-size: 10.5px; }
     .game-row .team-name { font-size: 13px; }
@@ -546,9 +546,10 @@ async function loadGames() {
 
     container.className = 'games';
     container.innerHTML = '';
+    const groupSize = window.innerWidth >= 900 ? 4 : 3;
     let currentRowPair = null;
     games.forEach((g, idx) => {
-      if (idx % 3 === 0) {
+      if (idx % groupSize === 0) {
         currentRowPair = document.createElement('div');
         currentRowPair.className = 'game-row-pair';
         container.appendChild(currentRowPair);
