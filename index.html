@@ -199,7 +199,7 @@
 </main>
 
 <footer>
-  Model blends run differential (Pythagorean win expectation), season record, home/away-specific record, recent form, and starting pitcher ERA — it is not a guarantee and doesn't account for everything a sportsbook prices in (weather, bullpen usage, lineup changes, injuries not yet reflected in stats, etc). Use it as one input, not the whole decision. Bet only what you can afford to lose.
+  Model blends run differential (Pythagorean win expectation), season record, home/away-specific record, recent form, starting pitcher FIP/ERA, park factors, current weather, bullpen workload, and season head-to-head — it is not a guarantee and doesn't account for everything a sportsbook prices in. Starting lineups and recent injured-list moves are shown for context but aren't yet folded into the probability numbers. Use it as one input, not the whole decision. Bet only what you can afford to lose.
 </footer>
 
 <script>
@@ -332,6 +332,22 @@ async function getHeadToHead(teamId, opponentId, season, beforeDate) {
   if (!teamId || !opponentId || !season) return null;
   try {
     return await fetchJSON(`/api/head-to-head?teamId=${teamId}&opponentId=${opponentId}&season=${season}&beforeDate=${encodeURIComponent(beforeDate)}`);
+  } catch (e) {
+    return null;
+  }
+}
+
+async function getLineup(gamePk) {
+  try {
+    return await fetchJSON(`/api/lineup?gamePk=${gamePk}`);
+  } catch (e) {
+    return null;
+  }
+}
+
+async function getRecentTransactions(teamId) {
+  try {
+    return await fetchJSON(`/api/transactions?teamId=${teamId}`);
   } catch (e) {
     return null;
   }
@@ -552,7 +568,7 @@ async function renderMatchup(gamePk) {
   const homePitcher = game.teams.home.probablePitcher;
 
   try {
-    const [awayRec, homeRec, awayERA, homeERA, weather, awayWorkload, homeWorkload, h2h] = await Promise.all([
+    const [awayRec, homeRec, awayERA, homeERA, weather, awayWorkload, homeWorkload, h2h, lineup, awayMoves, homeMoves] = await Promise.all([
       getStandingsRecord(awayTeam.id, season),
       getStandingsRecord(homeTeam.id, season),
       getPitcherERA(awayPitcher && awayPitcher.id, season),
@@ -560,7 +576,10 @@ async function renderMatchup(gamePk) {
       getWeather(game.venue && game.venue.id),
       getRecentGames(awayTeam.id, game.gameDate),
       getRecentGames(homeTeam.id, game.gameDate),
-      getHeadToHead(awayTeam.id, homeTeam.id, season, game.gameDate)
+      getHeadToHead(awayTeam.id, homeTeam.id, season, game.gameDate),
+      getLineup(gamePk),
+      getRecentTransactions(awayTeam.id),
+      getRecentTransactions(homeTeam.id)
     ]);
 
     const awayOverall = pctFromRecord(awayRec);
@@ -676,6 +695,32 @@ async function renderMatchup(gamePk) {
             ${homeERA ? `ERA ${homeERA.era.toFixed(2)}${homeERA.fip !== null ? ` · FIP ${homeERA.fip.toFixed(2)}` : ''}` : 'No stats yet'}
           </div>
         </div>
+
+        <div class="pitchers" style="border-bottom:1px solid var(--line);">
+          ${lineup && lineup.lineupsPosted ? `
+            <div>
+              <div class="label">${awayTeam.abbreviation || 'Away'} lineup</div>
+              ${lineup.awayLineup.map((p, i) => `${i + 1}. ${p.name} (${p.position})`).join('<br>')}
+            </div>
+            <div>
+              <div class="label">${homeTeam.abbreviation || 'Home'} lineup</div>
+              ${lineup.homeLineup.map((p, i) => `${i + 1}. ${p.name} (${p.position})`).join('<br>')}
+            </div>
+          ` : `<div style="grid-column: 1 / -1; color: var(--ink-soft);">Lineups not posted yet — usually available 1-2 hours before first pitch.</div>`}
+        </div>
+
+        ${(awayMoves && awayMoves.transactions.length) || (homeMoves && homeMoves.transactions.length) ? `
+        <div class="pitchers" style="border-bottom:1px solid var(--line); font-size: 11px;">
+          <div>
+            <div class="label">${awayTeam.abbreviation || 'Away'} recent IL moves</div>
+            ${awayMoves && awayMoves.transactions.length ? awayMoves.transactions.map(t => `${t.date}: ${t.description}`).join('<br>') : 'None in last 14 days'}
+          </div>
+          <div>
+            <div class="label">${homeTeam.abbreviation || 'Home'} recent IL moves</div>
+            ${homeMoves && homeMoves.transactions.length ? homeMoves.transactions.map(t => `${t.date}: ${t.description}`).join('<br>') : 'None in last 14 days'}
+          </div>
+        </div>
+        ` : ''}
         <div class="odds-section">
           <h3>Compare to your odds</h3>
           <p class="hint">Enter the moneyline odds you see on your book/app (American format, e.g. -150 or +130) to see the implied probability and whether the model sees an edge.</p>
