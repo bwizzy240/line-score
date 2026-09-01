@@ -170,6 +170,29 @@ function fmtDateLabel(d) {
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+function statusLabel(g) {
+  const abs = g.status.abstractGameState;
+  if (abs === 'Preview') {
+    return new Date(g.gameDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  }
+  if (abs === 'Final') {
+    const a = g.teams.away.score ?? 0;
+    const h = g.teams.home.score ?? 0;
+    return `Final ${a}-${h}`;
+  }
+  if (abs === 'Live') {
+    const a = g.teams.away.score ?? 0;
+    const h = g.teams.home.score ?? 0;
+    const ls = g.linescore;
+    let inning = '';
+    if (ls && ls.currentInningOrdinal) {
+      inning = `${ls.inningState || ''} ${ls.currentInningOrdinal}`.trim();
+    }
+    return `${a}-${h} · ${inning || g.status.detailedState}`;
+  }
+  return g.status.detailedState;
+}
+
 async function fetchJSON(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Request failed (${res.status})`);
@@ -204,8 +227,7 @@ async function loadGames() {
       row.dataset.gameId = g.gamePk;
       const away = g.teams.away.team.name;
       const home = g.teams.home.team.name;
-      const time = new Date(g.gameDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-      row.innerHTML = `<span class="teams">${away} @ ${home}</span><span class="time">${time}</span>`;
+      row.innerHTML = `<span class="teams">${away} @ ${home}</span><span class="time">${statusLabel(g)}</span>`;
       row.addEventListener('click', () => selectGame(g.gamePk));
       container.appendChild(row);
     });
@@ -325,6 +347,9 @@ async function renderMatchup(gamePk) {
             <div class="record">${homeRec ? homeRec.leagueRecord.wins + '-' + homeRec.leagueRecord.losses : '—'}</div>
           </div>
         </div>
+        <div id="liveStatus" style="text-align:center; padding:8px 18px; background:var(--field-dark); color:var(--chalk); font-size:13px; letter-spacing:0.5px;">
+          ${statusLabel(game)}
+        </div>
         <div class="probbar-wrap">
           <div class="probbar-label"><span>Model win probability</span><span>Log5 + form + starter ERA</span></div>
           <div class="probbar">
@@ -399,6 +424,41 @@ document.getElementById('nextDay').addEventListener('click', () => {
   currentDate.setDate(currentDate.getDate() + 1);
   loadGames();
 });
+
+let selectedGameId = null;
+const originalSelectGame = selectGame;
+selectGame = function(gamePk) {
+  selectedGameId = gamePk;
+  originalSelectGame(gamePk);
+};
+
+async function refreshLiveScores() {
+  try {
+    const dateStr = fmtDate(currentDate);
+    const data = await fetchJSON(`/api/schedule?date=${dateStr}`);
+    const dates = data.dates || [];
+    const freshGames = dates.length ? dates[0].games : [];
+    gamesCache = freshGames;
+
+    document.querySelectorAll('.game-row').forEach(el => {
+      const g = freshGames.find(x => String(x.gamePk) === el.dataset.gameId);
+      if (g) {
+        const timeSpan = el.querySelector('.time');
+        if (timeSpan) timeSpan.textContent = statusLabel(g);
+      }
+    });
+
+    if (selectedGameId) {
+      const g = freshGames.find(x => String(x.gamePk) === String(selectedGameId));
+      const statusEl = document.getElementById('liveStatus');
+      if (g && statusEl) statusEl.textContent = statusLabel(g);
+    }
+  } catch (e) {
+    // silent fail on background refresh
+  }
+}
+
+setInterval(refreshLiveScores, 30000);
 
 loadGames();
 </script>
