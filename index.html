@@ -401,6 +401,7 @@
   <button id="tabGames" class="tab active">Games</button>
   <button id="tabParlays" class="tab">Parlays</button>
   <button id="tabBets" class="tab">My Bets</button>
+  <button id="tabBacktest" class="tab">Backtest</button>
 </div>
 
 <div class="datebar" id="datebarEl">
@@ -416,6 +417,7 @@
   </div>
   <div id="parlaysView" style="display:none;"></div>
   <div id="betsView" style="display:none;"></div>
+  <div id="backtestView" style="display:none;"></div>
 </main>
 
 <footer>
@@ -2121,9 +2123,169 @@ function logParlay(idx, legCount) {
   saveBets(bets);
 }
 
+// ---- Backtest ----
+function renderBacktestView() {
+  const view = document.getElementById('backtestView');
+  if (view.dataset.rendered === 'true') return; // don't wipe results if already run
+  const today = new Date();
+  const thirtyDaysAgo = new Date(today);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const fmtInput = (d) => d.toISOString().slice(0, 10);
+
+  view.innerHTML = `
+    <div class="status" style="padding:14px 18px; text-align:left;">
+      Tests the model's record + home/away splits + recent-form blend against real completed games,
+      using team standings exactly as they stood the day before each game — not today's stats, which
+      would be cheating. Run differential (Pythagorean) isn't included here since historically-accurate
+      run data isn't available from a point-in-time source, so this checks a piece of the model, not
+      the full thing with FIP/weather/park factors. Bigger date ranges take longer (one API call pair per day).
+    </div>
+    <div style="padding: 0 18px 14px; display:flex; gap:10px; align-items:flex-end;">
+      <div style="flex:1;">
+        <label style="display:block; font-size:11px; color:var(--ink-soft); margin-bottom:4px;">Start date</label>
+        <input type="date" id="btStart" value="${fmtInput(thirtyDaysAgo)}" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--line); background:var(--chalk); color:var(--ink); font-family:inherit;">
+      </div>
+      <div style="flex:1;">
+        <label style="display:block; font-size:11px; color:var(--ink-soft); margin-bottom:4px;">End date</label>
+        <input type="date" id="btEnd" value="${fmtInput(today)}" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--line); background:var(--chalk); color:var(--ink); font-family:inherit;">
+      </div>
+    </div>
+    <div style="padding: 0 18px 14px;">
+      <button class="log-bet-btn" id="btRunBtn" style="width:100%;">Run backtest</button>
+    </div>
+    <div id="btResults"></div>
+  `;
+  view.dataset.rendered = 'true';
+
+  document.getElementById('btRunBtn').addEventListener('click', runBacktest);
+}
+
+async function runBacktest() {
+  const startStr = document.getElementById('btStart').value;
+  const endStr = document.getElementById('btEnd').value;
+  const resultsEl = document.getElementById('btResults');
+  const btn = document.getElementById('btRunBtn');
+  if (!startStr || !endStr) return;
+
+  const start = new Date(startStr + 'T12:00:00Z');
+  const end = new Date(endStr + 'T12:00:00Z');
+  if (start > end) {
+    resultsEl.innerHTML = `<div class="error-box">Start date must be before end date.</div>`;
+    return;
+  }
+
+  const dayCount = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
+  btn.disabled = true;
+
+  const predictions = []; // { predictedHomeProb, homeWon }
+  let daysProcessed = 0;
+  let errors = 0;
+
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const dateStr = fmtDate(d);
+    daysProcessed++;
+    btn.textContent = `Running… day ${daysProcessed}/${dayCount}`;
+
+    try {
+      const prevDay = new Date(d);
+      prevDay.setDate(prevDay.getDate() - 1);
+      const season = d.getFullYear();
+
+      const [schedData, standingsData] = await Promise.all([
+        fetchJSON(`/api/schedule?date=${dateStr}`),
+        fetchJSON(`/api/standings-on-date?date=${fmtDate(prevDay)}&season=${season}`)
+      ]);
+
+      const dates = schedData.dates || [];
+      const games = dates.length ? dates[0].games : [];
+      const finalGames = games.filter(g => g.status && g.status.abstractGameState === 'Final');
+
+      finalGames.forEach(g => {
+        const awayId = g.teams.away.team.id;
+        const homeId = g.teams.home.team.id;
+        const awayRec = standingsData.teams[awayId];
+        const homeRec = standingsData.teams[homeId];
+        if (!awayRec || !homeRec) return;
+
+        // Same blend as the live model, minus Pythagorean (no reliable historical run data).
+        const awayPct = blendPct(pctFromRecord(awayRec), null, splitPct(awayRec, 'away'), last10Pct(awayRec));
+        const homePct = blendPct(pctFromRecord(homeRec), null, splitPct(homeRec, 'home'), last10Pct(homeRec));
+        const predictedHomeProb = log5(homePct, awayPct);
+
+        const homeScore = g.teams.home.score;
+        const awayScore = g.teams.away.score;
+        if (homeScore == null || awayScore == null) return;
+        const homeWon = homeScore > awayScore;
+
+        predictions.push({ predictedHomeProb, homeWon });
+      });
+    } catch (e) {
+      errors++;
+    }
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Run backtest';
+
+  if (!predictions.length) {
+    resultsEl.innerHTML = `<div class="error-box">No completed games found in that range (or data couldn't be fetched — try a range from earlier this season).</div>`;
+    return;
+  }
+
+  // Bucket by predicted probability (of whichever side was favored, 50-100%) in 5-point bands.
+  const buckets = {};
+  let brierSum = 0;
+  predictions.forEach(p => {
+    const favoredProb = p.predictedHomeProb >= 0.5 ? p.predictedHomeProb : 1 - p.predictedHomeProb;
+    const favoredWon = p.predictedHomeProb >= 0.5 ? p.homeWon : !p.homeWon;
+    const bucketKey = Math.min(95, Math.floor(favoredProb * 20) * 5); // 50,55,...,95
+    if (!buckets[bucketKey]) buckets[bucketKey] = { n: 0, wins: 0 };
+    buckets[bucketKey].n++;
+    if (favoredWon) buckets[bucketKey].wins++;
+
+    const actual = p.homeWon ? 1 : 0;
+    brierSum += Math.pow(p.predictedHomeProb - actual, 2);
+  });
+  const brierScore = brierSum / predictions.length;
+
+  const bucketKeys = Object.keys(buckets).map(Number).sort((a, b) => a - b);
+  const rows = bucketKeys.map(k => {
+    const b = buckets[k];
+    const actualPct = (b.wins / b.n) * 100;
+    const predictedMid = k + 2.5;
+    const diff = actualPct - predictedMid;
+    const diffClass = Math.abs(diff) <= 5 ? 'pos' : 'neg';
+    return `
+      <div class="parlay-leg" style="padding:8px 0; border-bottom:1px solid var(--line);">
+        <span>${k}-${k + 5}% predicted (n=${b.n})</span>
+        <span class="leg-prob" style="color:${diffClass === 'pos' ? 'var(--field)' : 'var(--neg)'};">${actualPct.toFixed(1)}% actual</span>
+      </div>
+    `;
+  }).join('');
+
+  resultsEl.innerHTML = `
+    <div class="bets-summary">
+      <div><div class="stat-num">${predictions.length}</div><div class="stat-label">Games tested</div></div>
+      <div><div class="stat-num">${brierScore.toFixed(3)}</div><div class="stat-label">Brier score</div></div>
+      <div><div class="stat-num">${errors}</div><div class="stat-label">Days skipped</div></div>
+    </div>
+    <div class="parlay-section-title">Calibration — predicted vs. actual</div>
+    <div class="parlay-card">
+      ${rows}
+      <div style="font-size:10.5px; color:var(--ink-soft); margin-top:10px; line-height:1.5;">
+        Each row groups games by how confident the model was in the favorite, then checks how often the favorite actually won.
+        Well-calibrated means these numbers stay close together — e.g. "70-75% predicted" games should see the favorite win
+        roughly 70-75% of the time. Brier score measures overall accuracy (0 = perfect, 0.25 = coin-flip guessing, lower is better).
+        ${errors > 0 ? `${errors} day(s) couldn't be fetched and were skipped.` : ''}
+      </div>
+    </div>
+  `;
+}
+
+
 function showTab(tabName) {
-  const tabs = { games: 'tabGames', parlays: 'tabParlays', bets: 'tabBets' };
-  const views = { games: 'gamesView', parlays: 'parlaysView', bets: 'betsView' };
+  const tabs = { games: 'tabGames', parlays: 'tabParlays', bets: 'tabBets', backtest: 'tabBacktest' };
+  const views = { games: 'gamesView', parlays: 'parlaysView', bets: 'betsView', backtest: 'backtestView' };
   Object.keys(tabs).forEach(key => {
     document.getElementById(tabs[key]).classList.toggle('active', key === tabName);
     document.getElementById(views[key]).style.display = key === tabName ? '' : 'none';
@@ -2134,11 +2296,13 @@ function showTab(tabName) {
     autoGradeBets().then(changed => { if (changed) renderBetsView(); });
   }
   if (tabName === 'parlays') loadParlayFinder();
+  if (tabName === 'backtest') renderBacktestView();
 }
 
 document.getElementById('tabGames').addEventListener('click', () => showTab('games'));
 document.getElementById('tabParlays').addEventListener('click', () => showTab('parlays'));
 document.getElementById('tabBets').addEventListener('click', () => showTab('bets'));
+document.getElementById('tabBacktest').addEventListener('click', () => showTab('backtest'));
 
 loadGames();
 </script>
