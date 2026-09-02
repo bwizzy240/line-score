@@ -2135,11 +2135,12 @@ function renderBacktestView() {
 
   view.innerHTML = `
     <div class="status" style="padding:14px 18px; text-align:left;">
-      Tests the model's record + home/away splits + recent-form blend against real completed games,
-      using team standings exactly as they stood the day before each game — not today's stats, which
-      would be cheating. Run differential (Pythagorean) isn't included here since historically-accurate
-      run data isn't available from a point-in-time source, so this checks a piece of the model, not
-      the full thing with FIP/weather/park factors. Bigger date ranges take longer (one API call pair per day).
+      Tests the full moneyline blend — record, Pythagorean win expectation, home/away splits, and recent
+      form — against real completed games, using team standings and actual run-differential-to-date exactly
+      as they stood before each game (reconstructed from real final scores, not today's stats — that would
+      be cheating). Doesn't include FIP, weather, park factors, or Kalshi, since those aren't reliably
+      reconstructable for past dates. First run loads the full season's game log, which takes a little
+      longer; after that, bigger date ranges just mean more days to loop through.
     </div>
     <div style="padding: 0 18px 14px; display:flex; gap:10px; align-items:flex-end;">
       <div style="flex:1;">
@@ -2177,6 +2178,53 @@ async function runBacktest() {
 
   const dayCount = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
   btn.disabled = true;
+  btn.textContent = 'Loading season game log…';
+
+  // Build a real, point-in-time run differential log from actual final scores — one fetch
+  // for the whole season, instead of relying on a "stats as of today" endpoint that can't
+  // tell us what a team's run differential looked like on a past date.
+  const seasonYear = end.getUTCFullYear();
+  const seasonLog = {}; // teamId -> [{ date, runsScored, runsAllowed }], chronological
+  try {
+    const seasonData = await fetchJSON(
+      `/api/schedule?startDate=${seasonYear}-01-01&endDate=${fmtDate(end)}&gameType=R`
+    );
+    const seasonDates = seasonData.dates || [];
+    seasonDates.forEach(day => {
+      (day.games || []).forEach(g => {
+        if (!g.status || g.status.abstractGameState !== 'Final') return;
+        const homeScore = g.teams.home.score;
+        const awayScore = g.teams.away.score;
+        if (homeScore == null || awayScore == null) return;
+        const gDate = g.gameDate;
+        const homeId = g.teams.home.team.id;
+        const awayId = g.teams.away.team.id;
+        if (!seasonLog[homeId]) seasonLog[homeId] = [];
+        if (!seasonLog[awayId]) seasonLog[awayId] = [];
+        seasonLog[homeId].push({ date: gDate, runsScored: homeScore, runsAllowed: awayScore });
+        seasonLog[awayId].push({ date: gDate, runsScored: awayScore, runsAllowed: homeScore });
+      });
+    });
+    Object.values(seasonLog).forEach(arr => arr.sort((a, b) => new Date(a.date) - new Date(b.date)));
+  } catch (e) {
+    resultsEl.innerHTML = `<div class="error-box">Couldn't load the season game log: ${e.message}</div>`;
+    btn.disabled = false;
+    btn.textContent = 'Run backtest';
+    return;
+  }
+
+  function cumulativeRunsAsOf(teamId, beforeDate) {
+    const log = seasonLog[teamId];
+    if (!log) return null;
+    let rs = 0, ra = 0, count = 0;
+    for (const entry of log) {
+      if (new Date(entry.date) >= new Date(beforeDate)) break; // log is sorted, safe to stop
+      rs += entry.runsScored;
+      ra += entry.runsAllowed;
+      count++;
+    }
+    return count > 0 ? { runsScored: rs, runsAllowed: ra } : null;
+  }
 
   const predictions = []; // { predictedHomeProb, homeWon }
   let daysProcessed = 0;
@@ -2208,9 +2256,14 @@ async function runBacktest() {
         const homeRec = standingsData.teams[homeId];
         if (!awayRec || !homeRec) return;
 
-        // Same blend as the live model, minus Pythagorean (no reliable historical run data).
-        const awayPct = blendPct(pctFromRecord(awayRec), null, splitPct(awayRec, 'away'), last10Pct(awayRec));
-        const homePct = blendPct(pctFromRecord(homeRec), null, splitPct(homeRec, 'home'), last10Pct(homeRec));
+        const awayRuns = cumulativeRunsAsOf(awayId, g.gameDate);
+        const homeRuns = cumulativeRunsAsOf(homeId, g.gameDate);
+        const awayPyth = awayRuns ? pythPct(awayRuns) : null;
+        const homePyth = homeRuns ? pythPct(homeRuns) : null;
+
+        // Full model blend now — record, real point-in-time Pythagorean, splits, and form.
+        const awayPct = blendPct(pctFromRecord(awayRec), awayPyth, splitPct(awayRec, 'away'), last10Pct(awayRec));
+        const homePct = blendPct(pctFromRecord(homeRec), homePyth, splitPct(homeRec, 'home'), last10Pct(homeRec));
         const predictedHomeProb = log5(homePct, awayPct);
 
         const homeScore = g.teams.home.score;
