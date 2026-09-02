@@ -3,2384 +3,332 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Line Score — MLB Probability Tool</title>
+<title>Gridiron — NFL Win Probability</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --field: #005C5C;
-    --field-dark: #003D3D;
-    --field-light: #0C7A7A;
-    --chalk: #0A2347;
-    --dirt: #E08F5C;
-    --dirt-light: #F0AD7C;
-    --amber: #F0A83E;
-    --amber-soft: rgba(240,168,62,0.18);
-    --ink: #F2F4F8;
-    --ink-soft: #A9BBD1;
-    --line: rgba(255,255,255,0.14);
-    --card: #123863;
-    --neg: #E15C4C;
-    --neg-soft: rgba(225,92,76,0.18);
-    --pos-soft: rgba(0,196,160,0.18);
-    --accent: #2DD4C4;
+    --field: #1E4D2B;
+    --field-dark: #10301B;
+    --field-light: #2F6B3C;
+    --night: #0B0F0D;
+    --card: #131C15;
+    --pigskin: #A9673F;
+    --pigskin-light: #C98A5E;
+    --gold: #E3A857;
+    --gold-soft: rgba(227, 168, 87, 0.16);
+    --ink: #F1F3EE;
+    --ink-soft: #8FA091;
+    --line: rgba(255, 255, 255, 0.10);
+    --flag: #D9584A;
   }
+
   * { box-sizing: border-box; }
+
   body {
     margin: 0;
-    background: var(--chalk);
+    background: var(--night);
     color: var(--ink);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    padding-bottom: 40px;
     -webkit-font-smoothing: antialiased;
+    padding-bottom: 32px;
   }
-  .mono {
-    font-family: 'SF Mono', ui-monospace, 'Courier New', monospace;
-    font-variant-numeric: tabular-nums;
-  }
-  header {
-    background: var(--field);
-    color: var(--ink);
-    padding: 22px 18px 20px;
-    border-bottom: 6px solid var(--dirt);
-  }
-  header h1 {
-    margin: 0;
-    font-family: 'Arial Narrow', 'Helvetica Neue', sans-serif;
-    font-weight: 800;
-    font-size: 28px;
-    letter-spacing: 0.5px;
+
+  .display {
+    font-family: 'Oswald', 'Arial Narrow', sans-serif;
     text-transform: uppercase;
   }
+
+  .mono {
+    font-family: 'Space Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  header {
+    background: linear-gradient(135deg, var(--field) 0%, var(--field-dark) 100%);
+    color: var(--ink);
+    padding: 22px 20px 20px;
+    border-bottom: 5px solid var(--pigskin);
+  }
+
+  header h1 {
+    margin: 0;
+    font-weight: 700;
+    font-size: 26px;
+    letter-spacing: 0.5px;
+  }
+
   header p {
     margin: 6px 0 0;
     font-size: 13px;
-    color: var(--ink-soft);
-    max-width: 46ch;
+    color: rgba(241, 243, 238, 0.75);
+    max-width: 44ch;
     line-height: 1.5;
   }
-  .datebar {
+
+  .weekbar {
+    background: var(--field-dark);
+    padding: 10px 20px;
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--ink-soft);
+  }
+
+  main {
+    max-width: 620px;
+    margin: 0 auto;
+    padding: 16px 16px 0;
+  }
+
+  .status {
+    text-align: center;
+    color: var(--ink-soft);
+    padding: 34px 12px;
+    font-size: 13.5px;
+  }
+
+  .games {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .game-card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px 16px 16px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  }
+
+  .kickoff {
+    font-size: 11px;
+    color: var(--ink-soft);
+    letter-spacing: 0.4px;
+    margin-bottom: 10px;
+  }
+
+  .matchup-row {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 14px 18px;
-    background: var(--field-dark);
+    padding: 4px 0;
   }
-  .datebar button {
-    background: none;
-    border: 1px solid rgba(255,255,255,0.15);
-    color: var(--ink);
-    font-family: inherit;
-    font-size: 18px;
-    width: 34px;
-    height: 34px;
-    border-radius: 4px;
-    cursor: pointer;
-  }
-  #dateLabel { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 90px; }
-  .date-day { font-size: 11px; font-weight: 700; letter-spacing: 0.6px; color: var(--ink-soft); }
-  .date-day.is-today { color: var(--accent); }
-  .date-num { font-size: 15px; font-weight: 800; color: var(--ink); }
-  .date-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); margin-top: 1px; }
-  main { padding: 16px; max-width: 640px; margin: 0 auto; }
-  .status { text-align: center; color: var(--ink-soft); padding: 30px 10px; font-size: 14px; }
-  .games { display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; }
-  .game-row-pair { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-  .game-row {
-    background: var(--card);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 12px;
-    padding: 9px 8px;
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    font-size: 13px;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.3);
-    transition: transform 0.1s ease, box-shadow 0.1s ease;
-  }
-  .game-row:active { transform: scale(0.99); box-shadow: 0 2px 8px rgba(0,0,0,0.35); }
-  .game-row.active { box-shadow: 0 4px 14px rgba(0,0,0,0.35), 0 0 0 1.5px var(--accent); }
-  .game-row .team-stack { display: flex; flex-direction: column; gap: 6px; }
-  .game-row .team-line { display: flex; align-items: center; gap: 5px; }
-  .game-row .team-line > span:last-child { display: flex; flex-direction: column; min-width: 0; }
-  .team-badge {
-    width: 20px; height: 20px; border-radius: 50%; flex-shrink: 0;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 7.5px; font-weight: 800; color: var(--ink);
-    border: 1.5px solid rgba(255,255,255,0.18);
-  }
-  .team-badge { box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
-  .game-row .team-name { font-weight: 700; color: var(--ink); font-size: 10.5px; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .game-row .team-record { font-size: 8.5px; color: var(--ink-soft); display: block; }
-  .game-row .divider-col { height: 1px; width: 100%; background: var(--line); }
-  .game-row .matchup-stack { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-  .game-row .matchup-time { font-size: 10px; font-weight: 700; color: var(--ink); margin-bottom: 1px; display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pitcher-line { display: flex; align-items: center; gap: 4px; }
-  .pitcher-avatar {
-    width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
-    background: var(--chalk); border: 1px solid var(--line);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 6px; font-weight: 700; color: var(--ink-soft);
-  }
-  .pitcher-info { font-size: 8.5px; line-height: 1.2; min-width: 0; }
-  .pitcher-info .p-name { color: var(--ink); font-weight: 600; display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
-  .pitcher-info .p-hand { color: var(--ink-soft); }
-  .pitcher-info .p-stats { color: var(--ink-soft); }
-  .pitcher-info .p-stats .unit { font-size: 7px; }
-  .live-dot {
-    width: 7px; height: 7px; border-radius: 50%; background: var(--neg);
-    animation: pulse 1.6s infinite;
-    display: inline-block;
-  }
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.35; }
-  }
-  .matchup {
-    background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
-    box-shadow: 0 2px 10px rgba(28,38,32,0.08);
-  }
-  .scoreboard {
-    background: linear-gradient(135deg, var(--field) 0%, var(--field-dark) 100%);
-    color: var(--ink); padding: 22px 18px;
-    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px;
-  }
-  .scoreboard .team { text-align: center; }
-  .scoreboard .team .name {
-    font-family: 'Arial Narrow', sans-serif; font-weight: 800; font-size: 18px;
-    text-transform: uppercase; letter-spacing: 0.3px; line-height: 1.2;
-  }
-  .scoreboard .team .record { font-size: 12px; color: var(--ink-soft); margin-top: 4px; }
-  .scoreboard .at {
-    font-size: 11px; color: var(--ink-soft); border: 1px solid rgba(255,255,255,0.15); border-radius: 50%;
-    width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
-  }
-  .probbar-wrap { padding: 20px 18px; border-bottom: 1px solid var(--line); }
-  .probbar-label { text-align: center; font-size: 11px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px; }
-  .probbar-nums-big {
-    display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px;
-  }
-  .probbar-nums-big .pct {
-    font-size: 32px; font-weight: 800; font-family: 'Arial Narrow', sans-serif;
-  }
-  .probbar-nums-big .pct.away { color: var(--dirt); }
-  .probbar-nums-big .pct.home { color: var(--field); }
-  .probbar-nums-big .abbr { font-size: 11px; color: var(--ink-soft); text-transform: uppercase; display: block; margin-top: 2px; }
-  .probbar { height: 10px; border-radius: 10px; overflow: hidden; display: flex; background: var(--line); }
-  .probbar .away { background: linear-gradient(90deg, var(--dirt-light), var(--dirt)); }
-  .probbar .home { background: linear-gradient(90deg, var(--field), var(--field-light)); }
-  .probbar-caption { text-align: center; font-size: 11.5px; color: var(--ink-soft); margin-top: 12px; line-height: 1.5; }
-  .pitchers {
-    padding: 14px 18px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--ink-soft);
-    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-  }
-  .pitchers .label { color: var(--ink); font-weight: bold; margin-bottom: 2px; }
-  .odds-section { padding: 18px; }
-  .odds-section h3 {
-    margin: 0 0 4px; font-family: 'Arial Narrow', sans-serif;
-    font-size: 15px; text-transform: uppercase; letter-spacing: 0.5px;
-  }
-  .odds-section .hint { font-size: 12px; color: var(--ink-soft); margin: 0 0 14px; line-height: 1.5; }
-  .odds-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-  .odds-field label {
-    display: block; font-size: 11px; text-transform: uppercase; color: var(--ink-soft);
-    margin-bottom: 5px; letter-spacing: 0.4px; font-weight: 600;
-  }
-  .odds-field input {
-    width: 100%; padding: 11px 12px; font-family: 'SF Mono', ui-monospace, 'Courier New', monospace;
-    font-size: 15px; font-weight: 600;
-    border: 1.5px solid var(--line); border-radius: 9px; background: var(--chalk); color: var(--ink);
-  }
-  .odds-field input:focus { outline: none; border-color: var(--amber); background: #1A4570; }
-  .result { margin-top: 10px; padding-top: 16px; border-top: 1px dashed var(--line); display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .result .col { text-align: center; padding: 14px 8px; border-radius: 12px; background: var(--chalk); border: 1.5px solid var(--line); }
-  .result .col.edge-pos { background: var(--amber-soft); border-color: var(--amber); }
-  .result .col.edge-neg { background: var(--neg-soft); border-color: var(--neg); }
-  .result .team-abbr { font-size: 11px; color: var(--ink-soft); text-transform: uppercase; font-weight: 600; }
-  .result .implied { font-size: 24px; font-weight: 800; margin: 6px 0 3px; font-family: 'SF Mono', ui-monospace, 'Courier New', monospace; }
-  .result .edge { font-size: 11.5px; }
-  .result .edge.pos { color: var(--amber); font-weight: 700; }
-  .result .edge.neg { color: var(--neg); }
-  footer {
-    max-width: 60ch; margin: 26px auto 0; padding: 0 18px;
-    font-size: 11.5px; color: var(--ink-soft); line-height: 1.6; text-align: center;
-  }
-  .error-box {
-    background: var(--neg-soft); border: 1px solid var(--neg); color: var(--neg);
-    padding: 14px; border-radius: 3px; font-size: 13px; margin-bottom: 16px;
-  }
-  .bet-tabs {
-    display: flex;
-    gap: 6px;
-    padding: 12px 14px;
-    background: var(--chalk);
-    border-bottom: 1px solid var(--line);
-  }
-  .bet-tab {
-    flex: 1;
-    padding: 10px 6px;
-    background: var(--card);
-    border: 1.5px solid var(--line);
-    border-radius: 10px;
-    font-family: 'Arial Narrow', sans-serif;
-    font-weight: 700;
-    font-size: 12.5px;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    color: var(--ink-soft);
-    cursor: pointer;
+
+  .badge {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 5px;
-  }
-  .bet-tab .glyph { font-size: 13px; }
-  .bet-tab.active {
+    font-size: 9.5px;
+    font-weight: 700;
     color: var(--ink);
-    background: var(--field);
-    border-color: var(--field);
+    border: 1.5px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
   }
-  .bet-panel { padding: 16px 18px; }
-  .plain-hint {
-    font-size: 12.5px;
+
+  .team-info {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .team-name {
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .team-record {
+    font-size: 10.5px;
     color: var(--ink-soft);
-    line-height: 1.5;
-    margin: 0 0 14px;
   }
-  details.game-details {
-    border-top: 1px solid var(--line);
-  }
-  details.game-details summary {
-    padding: 14px 18px;
-    cursor: pointer;
-    font-family: 'Arial Narrow', sans-serif;
-    font-size: 13px;
+
+  .pct {
+    font-size: 20px;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    color: var(--field);
-    list-style: none;
-  }
-  details.game-details summary::-webkit-details-marker { display: none; }
-  details.game-details summary::before {
-    content: '+ ';
-  }
-  details.game-details[open] summary::before {
-    content: '– ';
-  }
-  details.game-details .details-inner {
-    padding: 0 18px 16px;
-  }
-  .detail-block {
-    margin-bottom: 18px;
-    font-size: 12.5px;
-    line-height: 1.6;
-  }
-  .detail-block .detail-title {
-    font-weight: 700;
-    color: var(--ink);
-    text-transform: uppercase;
-    font-size: 11px;
-    letter-spacing: 0.4px;
-    margin-bottom: 8px;
-  }
-  .detail-cols {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 14px;
-  }
-  .chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip {
-    display: inline-flex; align-items: center; gap: 4px;
-    background: var(--chalk); border: 1px solid var(--line); border-radius: 20px;
-    padding: 5px 11px; font-size: 11.5px; color: var(--ink);
-  }
-  .chip.chip-out { background: var(--amber-soft); border-color: var(--amber); }
-  .chip.chip-in { background: var(--pos-soft); border-color: var(--field); }
-  .lineup-list { display: flex; flex-direction: column; gap: 4px; }
-  .lineup-row { display: flex; align-items: center; gap: 8px; }
-  .lineup-num {
-    width: 18px; height: 18px; border-radius: 50%; background: var(--field); color: var(--ink);
-    font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center;
     flex-shrink: 0;
   }
-  .lineup-name { flex: 1; font-size: 12.5px; }
-  .lineup-pos {
-    font-size: 10px; color: var(--ink-soft); background: var(--chalk); border: 1px solid var(--line);
-    border-radius: 5px; padding: 1px 6px; text-transform: uppercase;
-  }
-  .tabbar {
-    display: flex; background: var(--field-dark); border-bottom: 1px solid rgba(255,255,255,0.1);
-  }
-  .tab {
-    flex: 1; background: none; border: none; color: var(--ink-soft); font-family: inherit;
-    font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; padding: 12px;
-    cursor: pointer;
-  }
-  .tab.active { color: var(--ink); border-bottom: 2px solid var(--amber); }
-  .log-bet-btn {
-    margin-top: 8px; width: 100%; padding: 8px; background: none;
-    border: 1px dashed var(--ink-soft); border-radius: 3px; color: var(--ink-soft);
-    font-family: inherit; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px;
-    cursor: pointer;
-  }
-  .log-bet-btn:active { background: var(--chalk); }
-  .bets-summary {
-    background: var(--field); color: var(--ink); padding: 16px 18px;
-    display: flex; justify-content: space-around; text-align: center;
-  }
-  .bets-summary .stat-num { font-size: 20px; font-weight: bold; }
-  .bets-summary .stat-label { font-size: 10px; color: var(--ink-soft); text-transform: uppercase; margin-top: 2px; }
-  .bet-card {
-    background: var(--card); border: 1px solid var(--line); border-radius: 3px;
-    padding: 12px 14px; margin: 10px 16px; font-size: 13px;
-  }
-  .bet-card .bet-top { display: flex; justify-content: space-between; font-weight: bold; }
-  .bet-card .bet-meta { color: var(--ink-soft); font-size: 11px; margin-top: 4px; }
-  .bet-card .bet-actions { display: flex; gap: 8px; margin-top: 10px; }
-  .bet-card .bet-actions button {
-    flex: 1; padding: 7px; font-family: inherit; font-size: 11px; text-transform: uppercase;
-    border-radius: 3px; border: 1px solid var(--line); background: var(--chalk); cursor: pointer;
-  }
-  .bet-card .bet-actions button.won { border-color: var(--field); color: var(--field); }
-  .bet-card .bet-actions button.lost { border-color: var(--neg); color: var(--neg); }
-  .bet-card.result-won { background: var(--pos-soft); border: 1.5px solid var(--field); border-left: 5px solid var(--field); }
-  .bet-card.result-lost { background: var(--neg-soft); border: 1.5px solid var(--neg); border-left: 5px solid var(--neg); }
-  .bet-card .delete-bet { color: var(--ink-soft); font-size: 11px; text-decoration: underline; background: none; border: none; cursor: pointer; padding: 0; margin-top: 8px; }
-  .parlay-section-title {
-    padding: 16px 18px 6px; font-family: 'Arial Narrow', sans-serif; font-size: 14px;
-    text-transform: uppercase; letter-spacing: 0.5px; color: var(--ink);
-  }
-  .parlay-card {
-    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-    padding: 14px 16px; margin: 8px 16px; box-shadow: 0 1px 3px rgba(28,38,32,0.06);
-  }
-  .parlay-legs { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
-  .parlay-leg { display: flex; justify-content: space-between; font-size: 13px; }
-  .parlay-leg .leg-prob { color: var(--ink-soft); font-family: 'SF Mono', ui-monospace, monospace; }
-  .parlay-footer {
-    display: flex; justify-content: space-between; align-items: center;
-    border-top: 1px dashed var(--line); padding-top: 10px;
-  }
-  .parlay-combined { font-size: 20px; font-weight: 800; font-family: 'SF Mono', ui-monospace, monospace; color: var(--field); }
-  .parlay-fairodds { font-size: 11px; color: var(--ink-soft); }
 
-  /* Desktop: everything above is tuned for phone width and stays untouched below this point.
-     This block only activates on wider screens, giving the layout room to breathe instead of
-     sitting in a narrow centered column with tiny phone-sized text and cards. */
-  @media (min-width: 900px) {
-    main { max-width: 1100px; padding: 24px 32px; }
-    .games { gap: 14px; }
-    .game-row-pair { grid-template-columns: repeat(4, 1fr); gap: 14px; }
-    .game-row { padding: 16px 14px; border-radius: 16px; gap: 10px; }
-    .team-badge { width: 30px; height: 30px; font-size: 10.5px; }
-    .game-row .team-name { font-size: 13px; }
-    .game-row .team-record { font-size: 11px; }
-    .game-row .matchup-time { font-size: 12.5px; }
-    .pitcher-avatar { width: 20px; height: 20px; font-size: 8px; }
-    .pitcher-info { font-size: 11px; }
-    .pitcher-info .p-stats .unit { font-size: 9px; }
+  .matchup-row.away .pct { color: var(--pigskin-light); }
+  .matchup-row.home .pct { color: var(--gold); }
 
-    .matchup { max-width: 640px; margin: 0 auto; }
-    .bet-card, .parlay-card { max-width: 640px; margin-left: auto; margin-right: auto; }
-    header, .tabbar, .datebar { padding-left: 32px; padding-right: 32px; }
+  .bar {
+    display: flex;
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 10px 0 2px;
+    background: var(--line);
   }
 
-  @media (min-width: 1300px) {
-    main { max-width: 1400px; }
+  .bar .fill-away { background: linear-gradient(90deg, var(--pigskin), var(--pigskin-light)); }
+  .bar .fill-home { background: linear-gradient(90deg, var(--gold), #F0C27E); }
+
+  footer {
+    max-width: 60ch;
+    margin: 24px auto 0;
+    padding: 0 20px;
+    font-size: 11px;
+    color: var(--ink-soft);
+    line-height: 1.6;
+    text-align: center;
   }
 </style>
 </head>
 <body>
-
 <header>
-  <h1>Line Score</h1>
-  <p>Pulls live MLB team &amp; pitcher data to estimate a win probability for each matchup, then compares it against odds you enter.</p>
+  <h1 class="display">Gridiron</h1>
+  <p>Pregame win probabilities from current-season form, previous-season baseline, and matchup context.</p>
 </header>
-
-<div class="tabbar">
-  <button id="tabGames" class="tab active">Games</button>
-  <button id="tabParlays" class="tab">Parlays</button>
-  <button id="tabBets" class="tab">My Bets</button>
-  <button id="tabBacktest" class="tab">Backtest</button>
-</div>
-
-<div class="datebar" id="datebarEl">
-  <button id="prevDay">‹</button>
-  <span id="dateLabel">Loading…</span>
-  <button id="nextDay">›</button>
-</div>
+<div class="weekbar mono" id="week-label">Loading…</div>
 
 <main>
-  <div id="gamesView">
-    <div id="gamesContainer" class="status">Loading today's games…</div>
-    <div id="matchupContainer"></div>
+  <div class="games" id="games">
+    <div class="status">Loading games…</div>
   </div>
-  <div id="parlaysView" style="display:none;"></div>
-  <div id="betsView" style="display:none;"></div>
-  <div id="backtestView" style="display:none;"></div>
 </main>
 
-<footer>
-  Model blends run differential (Pythagorean win expectation), season record, home/away-specific record, recent form, starting pitcher FIP/ERA, park factors, current weather, bullpen workload, lineup strength (once posted), and season head-to-head, with a calibration adjustment based on backtested results — it is not a guarantee and doesn't account for everything a sportsbook prices in. Recent injured-list moves are shown for context but aren't folded into the numbers directly. Use it as one input, not the whole decision. Bet only what you can afford to lose.
-</footer>
+<script type="module">
+  import { matchupProbability } from './model.js';
 
-<script>
-let currentDate = new Date();
-let gamesCache = [];
-
-function fmtDate(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-function fmtDateLabel(d) {
-  const today = new Date();
-  const isToday = d.toDateString() === today.toDateString();
-  const dayLabel = isToday ? 'TODAY' : d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase();
-  const dateLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  return `
-    <span class="date-day${isToday ? ' is-today' : ''}">${dayLabel}</span>
-    <span class="date-num">${dateLabel}</span>
-    ${isToday ? '<span class="date-dot"></span>' : ''}
-  `;
-}
-
-function statusLabel(g) {
-  const abs = g.status.abstractGameState;
-  if (abs === 'Preview') {
-    return new Date(g.gameDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  async function fetchJSON(url) {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`${url} returned ${r.status}`);
+    return r.json();
   }
-  if (abs === 'Final') {
-    const a = g.teams.away.score ?? 0;
-    const h = g.teams.home.score ?? 0;
-    return `Final ${a}-${h}`;
+
+  // schedule.js proxies ESPN's scoreboard — gives us this week's games,
+  // each team's id/abbreviation/colors, and kickoff time.
+  async function loadScoreboard() {
+    const data = await fetchJSON('/api/schedule');
+    return {
+      week: data.week?.number ?? null,
+      season: data.season?.year ?? new Date().getUTCFullYear(),
+      events: data.events ?? [],
+    };
   }
-  if (abs === 'Live') {
-    const a = g.teams.away.score ?? 0;
-    const h = g.teams.home.score ?? 0;
-    const ls = g.linescore;
-    let inning = '';
-    if (ls && ls.currentInningOrdinal) {
-      inning = `${ls.inningState || ''} ${ls.currentInningOrdinal}`.trim();
-    }
-    return `<span class="live-dot"></span>${a}-${h} · ${inning || g.status.detailedState}`;
+
+  // team-schedule.js wraps summarizeSeason() server-side and returns the
+  // stats object matchupProbability() expects directly — no client-side
+  // assembly needed.
+  async function loadTeamStats(teamId, season, beforeDate) {
+    const params = new URLSearchParams({ teamId, season, beforeDate });
+    return fetchJSON(`/api/team-schedule?${params}`);
   }
-  return g.status.detailedState;
-}
 
-async function fetchJSON(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Request failed (${res.status})`);
-  return res.json();
-}
-
-async function loadGames() {
-  const container = document.getElementById('gamesContainer');
-  const matchupContainer = document.getElementById('matchupContainer');
-
-  // matchupContainer may have been moved inside the games list (dropped under a row);
-  // relocate it back out before we wipe the list, or it'd be destroyed along with it.
-  if (matchupContainer.parentElement === container) {
-    container.insertAdjacentElement('afterend', matchupContainer);
+  function recordStr(stats) {
+    if (!stats || !stats.available) return '0-0';
+    return stats.ties ? `${stats.wins}-${stats.losses}-${stats.ties}` : `${stats.wins}-${stats.losses}`;
   }
-  matchupContainer.innerHTML = '';
-  openGameId = null;
-  liveProbContext = null;
 
-  document.getElementById('dateLabel').innerHTML = fmtDateLabel(currentDate);
-  container.className = 'status';
-  container.textContent = "Loading games…";
+  function teamMeta(competitor) {
+    return {
+      abbr: competitor.team.abbreviation,
+      name: competitor.team.shortDisplayName ?? competitor.team.name,
+      color: competitor.team.color ? `#${competitor.team.color}` : null,
+    };
+  }
 
-  try {
-    const dateStr = fmtDate(currentDate);
-    const data = await fetchJSON(`/api/schedule?date=${dateStr}`);
-    const dates = data.dates || [];
-    const games = dates.length ? dates[0].games : [];
-    gamesCache = games;
+  async function loadGames() {
+    const { week, season, events } = await loadScoreboard();
 
-    if (!games.length) {
-      container.textContent = "No MLB games scheduled this day.";
-      return;
-    }
+    const games = await Promise.all(events.map(async (ev) => {
+      const comp = ev.competitions?.[0];
+      const homeC = comp?.competitors?.find(c => c.homeAway === 'home');
+      const awayC = comp?.competitors?.find(c => c.homeAway === 'away');
+      if (!homeC || !awayC || !comp?.date) return null;
 
-    container.className = 'games';
-    container.innerHTML = '<div class="status">Loading records &amp; probable pitchers…</div>';
+      const kickoff = comp.date;
+      const [homeStats, awayStats] = await Promise.all([
+        loadTeamStats(homeC.team.id, season, kickoff),
+        loadTeamStats(awayC.team.id, season, kickoff),
+      ]);
 
-    const season = new Date(currentDate).getFullYear();
-    const standingsMap = await fetchAllStandings(season);
+      const { homeWinProb } = matchupProbability(
+        homeStats, awayStats, homeC.team.abbreviation, awayC.team.abbreviation
+      );
 
-    // Fetch stats for every announced probable pitcher across the slate, in parallel.
-    const pitcherIds = new Set();
-    games.forEach(g => {
-      if (g.teams.away.probablePitcher) pitcherIds.add(g.teams.away.probablePitcher.id);
-      if (g.teams.home.probablePitcher) pitcherIds.add(g.teams.home.probablePitcher.id);
-    });
-    const pitcherStatsMap = new Map();
-    await Promise.all([...pitcherIds].map(async id => {
-      const stats = await getPitcherERA(id, season);
-      if (stats) pitcherStatsMap.set(id, stats);
+      return {
+        away: { ...teamMeta(awayC), record: recordStr(awayStats) },
+        home: { ...teamMeta(homeC), record: recordStr(homeStats) },
+        kickoff,
+        homeWinProb,
+      };
     }));
 
-    function initials(fullName) {
-      if (!fullName) return '';
-      const parts = fullName.trim().split(' ');
-      return parts.length > 1 ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase() : fullName.slice(0, 2).toUpperCase();
-    }
+    return { week, season, games: games.filter(Boolean) };
+  }
 
-    function pitcherLineHTML(pitcher, stats) {
-      if (!pitcher) {
-        return `<div class="pitcher-line"><span class="pitcher-avatar">–</span><span class="pitcher-info"><span class="p-name">TBD</span></span></div>`;
-      }
-      const hand = pitcher.pitchHand && pitcher.pitchHand.code ? ` (${pitcher.pitchHand.code}HP)` : '';
-      const statLine = stats
-        ? `${stats.wins ?? '–'}-${stats.losses ?? '–'}, ${!isNaN(stats.era) ? stats.era.toFixed(2) : '–'} <span class="unit">ERA</span>`
-        : '';
-      return `
-        <div class="pitcher-line">
-          <span class="pitcher-avatar">${initials(pitcher.fullName)}</span>
-          <span class="pitcher-info">
-            <span class="p-name">${pitcher.fullName}</span><span class="p-hand">${hand}</span><br>
-            <span class="p-stats">${statLine}</span>
-          </span>
+  function formatKickoff(iso) {
+    const d = new Date(iso);
+    return d.toLocaleString('en-US', {
+      weekday: 'short', hour: 'numeric', minute: '2-digit', timeZoneName: 'short'
+    }).toUpperCase();
+  }
+
+  function teamRow(team, pct, side) {
+    return `
+      <div class="matchup-row ${side}">
+        <div class="badge" style="background:${team.color ?? 'var(--field)'}">${team.abbr}</div>
+        <div class="team-info">
+          <div class="team-name">${team.name}</div>
+          <div class="team-record mono">${team.record}</div>
         </div>
-      `;
-    }
-
-    container.className = 'games';
-    container.innerHTML = '';
-    const groupSize = window.innerWidth >= 900 ? 4 : 3;
-    let currentRowPair = null;
-    games.forEach((g, idx) => {
-      if (idx % groupSize === 0) {
-        currentRowPair = document.createElement('div');
-        currentRowPair.className = 'game-row-pair';
-        container.appendChild(currentRowPair);
-      }
-
-      const row = document.createElement('div');
-      row.className = 'game-row';
-      row.dataset.gameId = g.gamePk;
-
-      const awayTeam = g.teams.away.team;
-      const homeTeam = g.teams.home.team;
-      const awayRec = standingsMap.get(awayTeam.id);
-      const homeRec = standingsMap.get(homeTeam.id);
-      const awayRecStr = awayRec ? `${awayRec.leagueRecord.wins}-${awayRec.leagueRecord.losses}` : '';
-      const homeRecStr = homeRec ? `${homeRec.leagueRecord.wins}-${homeRec.leagueRecord.losses}` : '';
-
-      const awayPitcher = g.teams.away.probablePitcher;
-      const homePitcher = g.teams.home.probablePitcher;
-      const awayStats = awayPitcher ? pitcherStatsMap.get(awayPitcher.id) : null;
-      const homeStats = homePitcher ? pitcherStatsMap.get(homePitcher.id) : null;
-
-      row.innerHTML = `
-        <div class="team-stack">
-          <div class="team-line">
-            <span class="team-badge" style="background:${getTeamColor(awayTeam.id)}; color:${readableTextColor(getTeamColor(awayTeam.id))};">${awayTeam.abbreviation || '?'}</span>
-            <span><span class="team-name">${awayTeam.teamName || awayTeam.name}</span><span class="team-record">${awayRecStr}</span></span>
-          </div>
-          <div class="team-line">
-            <span class="team-badge" style="background:${getTeamColor(homeTeam.id)}; color:${readableTextColor(getTeamColor(homeTeam.id))};">${homeTeam.abbreviation || '?'}</span>
-            <span><span class="team-name">${homeTeam.teamName || homeTeam.name}</span><span class="team-record">${homeRecStr}</span></span>
-          </div>
-        </div>
-        <div class="divider-col"></div>
-        <div class="matchup-stack">
-          <div class="matchup-time">${statusLabel(g)}</div>
-          ${pitcherLineHTML(awayPitcher, awayStats)}
-          ${pitcherLineHTML(homePitcher, homeStats)}
-        </div>
-      `;
-      row.addEventListener('click', () => selectGame(g.gamePk, row));
-      currentRowPair.appendChild(row);
-    });
-  } catch (err) {
-    container.className = 'status';
-    container.innerHTML = `<div class="error-box">Couldn't load games: ${err.message}. Try again or pick another date.</div>`;
-  }
-}
-
-let openGameId = null;
-let liveProbContext = null; // set by renderMatchup, used to track Kalshi line movement while a game is open
-
-function selectGame(gamePk, rowEl) {
-  const matchupEl = document.getElementById('matchupContainer');
-
-  // Tapping the already-open game collapses it instead of re-rendering.
-  if (String(openGameId) === String(gamePk)) {
-    openGameId = null;
-    liveProbContext = null;
-    matchupEl.innerHTML = '';
-    document.querySelectorAll('.game-row').forEach(el => el.classList.remove('active'));
-    return;
-  }
-
-  openGameId = gamePk;
-  document.querySelectorAll('.game-row').forEach(el => {
-    el.classList.toggle('active', String(el.dataset.gameId) === String(gamePk));
-  });
-
-  if (rowEl) {
-    const rowPair = rowEl.closest('.game-row-pair') || rowEl;
-    rowPair.insertAdjacentElement('afterend', matchupEl);
-    rowEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
-
-  renderMatchup(gamePk);
-}
-
-async function getStandingsRecord(teamId, season) {
-  const data = await fetchJSON(`/api/standings?season=${season}`);
-  for (const rec of data.records) {
-    for (const t of rec.teamRecords) {
-      if (t.team.id === teamId) return t;
-    }
-  }
-  return null;
-}
-
-async function getWeather(venueId) {
-  if (!venueId) return null;
-  try {
-    return await fetchJSON(`/api/weather?venueId=${venueId}`);
-  } catch (e) {
-    return null;
-  }
-}
-
-async function getTeamContext(teamId, pitcherId, gameDate, currentVenueId) {
-  try {
-    const params = new URLSearchParams({ teamId, beforeDate: gameDate });
-    if (pitcherId) params.set('pitcherId', pitcherId);
-    if (currentVenueId) params.set('currentVenueId', currentVenueId);
-    return await fetchJSON(`/api/team-info?${params.toString()}`);
-  } catch (e) {
-    return null;
-  }
-}
-
-async function getRecentGames(teamId, gameDate) {
-  if (!teamId || !gameDate) return null;
-  try {
-    return await fetchJSON(`/api/team-info?teamId=${teamId}&beforeDate=${encodeURIComponent(gameDate)}`);
-  } catch (e) {
-    return null;
-  }
-}
-
-function fatigueRunsAdjustment(recentGames) {
-  if (!recentGames) return 0;
-  let adj = 0;
-  const g = recentGames.gamesInLast3Days ?? 0;
-  if (g >= 3) adj += 0.20;
-  else if (g === 2) adj += 0.10;
-  if (recentGames.doubleHeaderRecently) adj += 0.15;
-  return Math.min(0.35, adj);
-}
-
-async function getHeadToHead(teamId, opponentId, season, beforeDate) {
-  if (!teamId || !opponentId || !season) return null;
-  try {
-    const data = await fetchJSON(`/api/team-info?teamId=${teamId}&opponentId=${opponentId}&season=${season}&beforeDate=${encodeURIComponent(beforeDate)}`);
-    return data ? data.h2h : null;
-  } catch (e) {
-    return null;
-  }
-}
-
-async function getLineup(gamePk, awayTeamId, homeTeamId, season) {
-  try {
-    return await fetchJSON(`/api/lineup?gamePk=${gamePk}&awayTeamId=${awayTeamId}&homeTeamId=${homeTeamId}&season=${season}`);
-  } catch (e) {
-    return null;
-  }
-}
-
-async function getRecentTransactions(teamId) {
-  try {
-    return await fetchJSON(`/api/transactions?teamId=${teamId}`);
-  } catch (e) {
-    return null;
-  }
-}
-
-async function getKalshiOdds(awayAbbr, homeAbbr) {
-  try {
-    return await fetchJSON(`/api/kalshi?type=moneyline&away=${awayAbbr}&home=${homeAbbr}`);
-  } catch (e) {
-    return null;
-  }
-}
-
-async function getKalshiRunLine(awayAbbr, homeAbbr) {
-  try {
-    return await fetchJSON(`/api/kalshi?type=runline&away=${awayAbbr}&home=${homeAbbr}`);
-  } catch (e) {
-    return null;
-  }
-}
-
-async function getKalshiTotal(awayAbbr, homeAbbr) {
-  try {
-    return await fetchJSON(`/api/kalshi?type=total&away=${awayAbbr}&home=${homeAbbr}`);
-  } catch (e) {
-    return null;
-  }
-}
-
-function probToAmerican(p) {
-  if (p <= 0 || p >= 1) return null;
-  if (p >= 0.5) {
-    return Math.round(-100 * p / (1 - p));
-  }
-  return Math.round(100 * (1 - p) / p);
-}
-
-async function getPitcherERA(pitcherId, season) {
-  if (!pitcherId) return null;
-  try {
-    const data = await fetchJSON(`/api/pitcher?id=${pitcherId}&season=${season}`);
-    const splits = data.stats && data.stats[0] && data.stats[0].splits;
-    if (splits && splits.length) {
-      const s = splits[0].stat;
-      const ip = parseFloat(s.inningsPitched);
-      const hr = Number(s.homeRuns);
-      const bb = Number(s.baseOnBalls);
-      const hbp = Number(s.hitByPitch);
-      const k = Number(s.strikeOuts);
-      let fip = null;
-      // FIP constant of 3.10 approximates league-average ERA; a reasonable fixed constant for this purpose.
-      if (ip > 0 && !isNaN(hr) && !isNaN(bb) && !isNaN(k)) {
-        fip = ((13 * hr + 3 * (bb + (hbp || 0)) - 2 * k) / ip) + 3.10;
-      }
-      return {
-        era: parseFloat(s.era),
-        ip,
-        whip: parseFloat(s.whip),
-        fip,
-        wins: s.wins,
-        losses: s.losses
-      };
-    }
-  } catch (e) {}
-  return null;
-}
-
-function log5(pctA, pctB) {
-  const num = pctA - pctA * pctB;
-  const den = pctA + pctB - 2 * pctA * pctB;
-  if (den === 0) return 0.5;
-  return num / den;
-}
-
-function pctFromRecord(rec) {
-  if (!rec) return null;
-  const w = parseInt(rec.leagueRecord?.wins ?? 0);
-  const l = parseInt(rec.leagueRecord?.losses ?? 0);
-  if (w + l === 0) return null;
-  return w / (w + l);
-}
-
-function splitPct(rec, type) {
-  const s = rec && (rec.records?.splitRecords || []).find(r => r.type === type);
-  if (!s) return null;
-  const total = s.wins + s.losses;
-  if (total === 0) return null;
-  return s.wins / total;
-}
-
-function pythPct(rec) {
-  if (!rec) return null;
-  const rs = Number(rec.runsScored);
-  const ra = Number(rec.runsAllowed);
-  if (!rs || !ra) return null;
-  const rs2 = Math.pow(rs, 1.83);
-  const ra2 = Math.pow(ra, 1.83);
-  return rs2 / (rs2 + ra2);
-}
-
-function blendPct(overall, pyth, split, l10) {
-  let weightSum = 0, valueSum = 0;
-  const add = (val, w) => {
-    if (val !== null && val !== undefined && !isNaN(val)) { valueSum += val * w; weightSum += w; }
-  };
-  add(overall, 0.20);
-  add(pyth, 0.45);
-  add(split, 0.20);
-  add(l10, 0.15);
-  return weightSum > 0 ? valueSum / weightSum : 0.5;
-}
-
-// The backtest showed predictions running consistently a few points overconfident (e.g. games
-// predicted 60-65% actually landed at ~57.6%). Shrinkage pulls raw predictions partway back
-// toward 50/50 to correct for that. This is a first-pass correction based on one 30-day sample —
-// worth re-running the backtest after this change and adjusting the factor if needed, not treating
-// 0.85 as scientifically exact.
-const MONEYLINE_SHRINKAGE = 0.85;
-function applyShrinkage(prob, factor) {
-  return 0.5 + (prob - 0.5) * factor;
-}
-
-function computeBaseWinProb(awayRec, homeRec) {
-  const awayPct = blendPct(pctFromRecord(awayRec), pythPct(awayRec), splitPct(awayRec, 'away'), last10Pct(awayRec));
-  const homePct = blendPct(pctFromRecord(homeRec), pythPct(homeRec), splitPct(homeRec, 'home'), last10Pct(homeRec));
-  const homeWinProb = applyShrinkage(log5(homePct, awayPct), MONEYLINE_SHRINKAGE);
-  return { homeWinProb, awayWinProb: 1 - homeWinProb };
-}
-
-function applyParkFactor(projection, homeTeamId) {
-  const park = getParkData(homeTeamId);
-  if (projection && park) {
-    const scale = park.factor / 100;
-    projection.expectedAwayRuns *= scale;
-    projection.expectedHomeRuns *= scale;
-    projection.expectedMargin = projection.expectedHomeRuns - projection.expectedAwayRuns;
-    projection.expectedTotal = projection.expectedAwayRuns + projection.expectedHomeRuns;
-  }
-  return park;
-}
-
-// Approximate long-run park factors (100 = neutral run environment) and park orientation
-// (compass bearing in degrees from home plate toward center field). These are well-established,
-// slowly-changing public reference values, not pulled from an API.
-// Real team brand colors (not logos — colors alone aren't protected the way a logo image is).
-// Where a team's primary color is navy/black (too close to this app's own dark background),
-// a brighter secondary/accent color is used instead so badges stay visually distinct.
-const TEAM_COLORS = {
-  108: '#BA0021', // LAA Angels
-  109: '#30A6DA', // ARI Diamondbacks (teal accent)
-  110: '#DF4601', // BAL Orioles
-  111: '#BD3039', // BOS Red Sox
-  112: '#0E3386', // CHC Cubs
-  113: '#C6011F', // CIN Reds
-  114: '#E31937', // CLE Guardians (red accent)
-  115: '#5B4A8A', // COL Rockies
-  116: '#FA4616', // DET Tigers (orange accent)
-  117: '#EB6E1F', // HOU Astros
-  118: '#004687', // KC Royals
-  119: '#005A9C', // LAD Dodgers
-  120: '#AB0003', // WSH Nationals
-  121: '#FF5910', // NYM Mets (orange accent)
-  133: '#EFB21E', // ATH
-  134: '#FDB827', // PIT Pirates (gold accent)
-  135: '#FFC425', // SD Padres (gold accent)
-  136: '#005C5C', // SEA Mariners
-  137: '#FD5A1E', // SF Giants
-  138: '#C41E3A', // STL Cardinals
-  139: '#8FBCE6', // TB Rays (light blue accent)
-  140: '#C0111F', // TEX Rangers
-  141: '#134A8E', // TOR Blue Jays
-  142: '#D31145', // MIN Twins (red accent)
-  143: '#E81828', // PHI Phillies
-  144: '#CE1141', // ATL Braves (red accent)
-  145: '#C4CED3', // CWS White Sox (silver accent)
-  146: '#00A3E0', // MIA Marlins
-  147: '#1C3F6E', // NYY Yankees
-  158: '#FFC52F'  // MIL Brewers (gold accent)
-};
-
-function getTeamColor(teamId) {
-  return TEAM_COLORS[teamId] || '#5B6B7A';
-}
-
-// Kalshi price history, stored locally so we can show line movement over time
-// (there's no database here, so this only sees movement since you started using the app on this device).
-function recordKalshiSnapshot(gamePk, homeProb) {
-  try {
-    const key = 'kalshiSnapshots';
-    const all = JSON.parse(localStorage.getItem(key) || '{}');
-    const arr = all[gamePk] || [];
-    arr.push({ ts: Date.now(), homeProb });
-    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-    all[gamePk] = arr.filter(s => s.ts >= cutoff).slice(-200);
-    localStorage.setItem(key, JSON.stringify(all));
-  } catch (e) { /* storage unavailable — skip silently */ }
-}
-
-function getKalshiMovement(gamePk, currentHomeProb) {
-  try {
-    const all = JSON.parse(localStorage.getItem('kalshiSnapshots') || '{}');
-    const arr = all[gamePk] || [];
-    if (!arr.length) return null;
-    const cutoff = Date.now() - 3 * 60 * 60 * 1000; // look back up to 3 hours
-    const relevant = arr.filter(s => s.ts >= cutoff);
-    const earliest = relevant.length ? relevant[0] : arr[0];
-    const delta = currentHomeProb - earliest.homeProb;
-    if (Math.abs(delta) < 0.01) return null; // negligible movement, not worth showing
-    const minutesAgo = Math.round((Date.now() - earliest.ts) / 60000);
-    if (minutesAgo < 1) return null; // need at least a little time between snapshots to mean anything
-    return { delta, minutesAgo };
-  } catch (e) {
-    return null;
-  }
-}
-
-function readableTextColor(hexColor) {
-  const hex = hexColor.replace('#', '');
-  const r = parseInt(hex.substring(0, 2), 16);
-  const g = parseInt(hex.substring(2, 4), 16);
-  const b = parseInt(hex.substring(4, 6), 16);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.6 ? '#12253F' : '#F2F4F8';
-}
-
-const PARK_DATA = {
-  108: { name: 'Angel Stadium', factor: 99, orientation: 20 },       // LAA
-  109: { name: 'Chase Field', factor: 102, orientation: 20 },        // ARI (retractable)
-  110: { name: 'Camden Yards', factor: 98, orientation: 30 },        // BAL
-  111: { name: 'Fenway Park', factor: 104, orientation: 45 },        // BOS
-  112: { name: 'Wrigley Field', factor: 101, orientation: 30 },      // CHC
-  113: { name: 'Great American Ball Park', factor: 105, orientation: 5 },  // CIN
-  114: { name: 'Progressive Field', factor: 97, orientation: 5 },    // CLE
-  115: { name: 'Coors Field', factor: 114, orientation: 50 },        // COL
-  116: { name: 'Comerica Park', factor: 96, orientation: 10 },       // DET
-  117: { name: 'Daikin Park', factor: 100, orientation: 340 },       // HOU (retractable)
-  118: { name: 'Kauffman Stadium', factor: 97, orientation: 35 },    // KC
-  119: { name: 'Dodger Stadium', factor: 97, orientation: 20 },      // LAD
-  120: { name: 'Nationals Park', factor: 99, orientation: 35 },      // WSH
-  121: { name: 'Citi Field', factor: 96, orientation: 30 },          // NYM
-  133: { name: "Sutter Health Park", factor: 100, orientation: 45 }, // ATH
-  134: { name: 'PNC Park', factor: 95, orientation: 10 },            // PIT
-  135: { name: 'Petco Park', factor: 95, orientation: 5 },           // SD
-  136: { name: 'T-Mobile Park', factor: 95, orientation: 45 },       // SEA (retractable)
-  137: { name: 'Oracle Park', factor: 92, orientation: 95 },         // SF
-  138: { name: 'Busch Stadium', factor: 96, orientation: 50 },       // STL
-  139: { name: 'Tropicana Field', factor: 96, orientation: 45 },     // TB (dome)
-  140: { name: 'Globe Life Field', factor: 99, orientation: 45 },    // TEX (retractable)
-  141: { name: 'Rogers Centre', factor: 100, orientation: 5 },       // TOR (retractable)
-  142: { name: 'Target Field', factor: 98, orientation: 45 },        // MIN
-  143: { name: 'Citizens Bank Park', factor: 104, orientation: 15 }, // PHI
-  144: { name: 'Truist Park', factor: 101, orientation: 130 },       // ATL
-  145: { name: 'Rate Field', factor: 100, orientation: 15 },         // CWS
-  146: { name: 'loanDepot Park', factor: 93, orientation: 40 },      // MIA (retractable)
-  147: { name: 'Yankee Stadium', factor: 103, orientation: 75 },     // NYY
-  158: { name: 'American Family Field', factor: 100, orientation: 55 } // MIL (retractable)
-};
-
-function getParkData(homeTeamId) {
-  return PARK_DATA[homeTeamId] || null;
-}
-
-function windEffect(windDirDeg, windMph, orientationDeg) {
-  if (windDirDeg == null || windMph == null || orientationDeg == null) return null;
-  // windDirDeg is the direction wind is blowing FROM (meteorological convention);
-  // the direction it blows TOWARD is 180° opposite.
-  const towardDeg = (windDirDeg + 180) % 360;
-  let diff = Math.abs(towardDeg - orientationDeg);
-  if (diff > 180) diff = 360 - diff;
-
-  let direction = 'cross';
-  if (diff <= 45) direction = 'out';
-  else if (diff >= 135) direction = 'in';
-
-  return { direction, windMph };
-}
-
-function last10Pct(rec) {
-  const l10 = rec && (rec.records?.splitRecords || []).find(r => r.type === 'lastTen');
-  if (!l10) return null;
-  const total = l10.wins + l10.losses;
-  if (total === 0) return null;
-  return l10.wins / total;
-}
-
-function gamesPlayed(rec) {
-  if (!rec) return null;
-  const w = Number(rec.leagueRecord?.wins);
-  const l = Number(rec.leagueRecord?.losses);
-  if (isNaN(w) || isNaN(l) || w + l === 0) return null;
-  return w + l;
-}
-
-// Standard normal CDF via Abramowitz-Stegun approximation
-function normalCDF(z) {
-  const t = 1 / (1 + 0.2316419 * Math.abs(z));
-  const d = 0.3989423 * Math.exp(-z * z / 2);
-  let p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-  if (z > 0) p = 1 - p;
-  return p;
-}
-
-// Derived from actual MLB scoring data: teams average ~4.4-4.5 runs/game with variance ~9.7-10
-// (source: Retrosheet-based studies). Combining two independent team distributions gives
-// variance(total) = variance(margin) = var(home) + var(away) ≈ 19.4, so std dev ≈ 4.4 for both.
-const MARGIN_STD_DEV = 4.4;
-const TOTAL_STD_DEV = 4.4;
-
-function projectRuns(awayRec, homeRec) {
-  const awayGP = gamesPlayed(awayRec);
-  const homeGP = gamesPlayed(homeRec);
-  const awayRS = Number(awayRec?.runsScored);
-  const awayRA = Number(awayRec?.runsAllowed);
-  const homeRS = Number(homeRec?.runsScored);
-  const homeRA = Number(homeRec?.runsAllowed);
-
-  if (!awayGP || !homeGP || isNaN(awayRS) || isNaN(awayRA) || isNaN(homeRS) || isNaN(homeRA)) {
-    return null;
-  }
-
-  const awayRPG = awayRS / awayGP;
-  const awayRAPG = awayRA / awayGP;
-  const homeRPG = homeRS / homeGP;
-  const homeRAPG = homeRA / homeGP;
-
-  const expectedAwayRuns = (awayRPG + homeRAPG) / 2;
-  const expectedHomeRuns = (homeRPG + awayRAPG) / 2;
-
-  return {
-    expectedAwayRuns,
-    expectedHomeRuns,
-    expectedMargin: expectedHomeRuns - expectedAwayRuns,
-    expectedTotal: expectedAwayRuns + expectedHomeRuns
-  };
-}
-
-function runLineProbs(projection, line) {
-  // line is the number the HOME team must cover by, e.g. -1.5 means home must win by 2+
-  // We treat "line" as the magnitude (1.5) and always frame as home -line / away +line
-  if (!projection) return null;
-  const z = (line - projection.expectedMargin) / MARGIN_STD_DEV;
-  const homeCoversProb = 1 - normalCDF(z);
-  return { home: homeCoversProb, away: 1 - homeCoversProb };
-}
-
-function totalProbs(projection, total) {
-  if (!projection) return null;
-  const z = (total - projection.expectedTotal) / TOTAL_STD_DEV;
-  const overProb = 1 - normalCDF(z);
-  return { over: overProb, under: 1 - overProb };
-}
-
-async function renderMatchup(gamePk) {
-  const el = document.getElementById('matchupContainer');
-  el.innerHTML = '<div class="status">Crunching numbers…</div>';
-
-  const game = gamesCache.find(g => g.gamePk === gamePk);
-  if (!game) return;
-
-  const season = new Date(game.gameDate).getFullYear();
-  const awayTeam = game.teams.away.team;
-  const homeTeam = game.teams.home.team;
-  const awayPitcher = game.teams.away.probablePitcher;
-  const homePitcher = game.teams.home.probablePitcher;
-
-  try {
-    const [awayRec, homeRec, awayERA, homeERA, weather, awayWorkload, homeWorkload, h2h, lineup, awayMoves, homeMoves, kalshiML, kalshiRL, kalshiTotal, awayContext, homeContext] = await Promise.all([
-      getStandingsRecord(awayTeam.id, season),
-      getStandingsRecord(homeTeam.id, season),
-      getPitcherERA(awayPitcher && awayPitcher.id, season),
-      getPitcherERA(homePitcher && homePitcher.id, season),
-      getWeather(game.venue && game.venue.id),
-      getRecentGames(awayTeam.id, game.gameDate),
-      getRecentGames(homeTeam.id, game.gameDate),
-      getHeadToHead(awayTeam.id, homeTeam.id, season, game.gameDate),
-      getLineup(gamePk, awayTeam.id, homeTeam.id, season),
-      getRecentTransactions(awayTeam.id),
-      getRecentTransactions(homeTeam.id),
-      getKalshiOdds(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME'),
-      getKalshiRunLine(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME'),
-      getKalshiTotal(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME'),
-      getTeamContext(awayTeam.id, awayPitcher && awayPitcher.id, game.gameDate, game.venue && game.venue.id),
-      getTeamContext(homeTeam.id, homePitcher && homePitcher.id, game.gameDate, game.venue && game.venue.id)
-    ]);
-
-    const { homeWinProb: baseHomeWinProb } = computeBaseWinProb(awayRec, homeRec);
-    let homeWinProb = baseHomeWinProb;
-
-    if (awayERA && homeERA && awayERA.ip > 15 && homeERA.ip > 15) {
-      const awayVal = awayERA.fip ?? awayERA.era;
-      const homeVal = homeERA.fip ?? homeERA.era;
-      const diff = awayVal - homeVal;
-      const shift = Math.max(-0.08, Math.min(0.08, diff * 0.025));
-      homeWinProb = Math.min(0.95, Math.max(0.05, homeWinProb + shift));
-    }
-
-    // Head-to-head is a weak signal (small sample), so it only applies with 3+ games played
-    // this season and is capped tightly so it can't meaningfully move the number on its own.
-    if (h2h && h2h.gamesPlayed >= 3) {
-      const awayH2HPct = h2h.wins / h2h.gamesPlayed;
-      const h2hShift = Math.max(-0.03, Math.min(0.03, (awayH2HPct - 0.5) * 0.08));
-      homeWinProb = Math.min(0.95, Math.max(0.05, homeWinProb - h2hShift));
-    }
-
-    // Kalshi's live price is fetched for comparison and line-movement tracking — not blended
-    // into the model's own probability, which stays purely our own calculation.
-    let kalshiHomeProb = null;
-    const homeAbbrForKalshi = homeTeam.abbreviation || 'HOME';
-    const awayAbbrForKalshi = awayTeam.abbreviation || 'AWAY';
-    if (kalshiML && kalshiML.available) {
-      if (kalshiML.yesTeam === homeAbbrForKalshi) kalshiHomeProb = kalshiML.yesProb;
-      else if (kalshiML.yesTeam === awayAbbrForKalshi) kalshiHomeProb = 1 - kalshiML.yesProb;
-    }
-
-    let kalshiMovement = null;
-    if (kalshiHomeProb !== null) {
-      recordKalshiSnapshot(gamePk, kalshiHomeProb);
-      kalshiMovement = getKalshiMovement(gamePk, kalshiHomeProb);
-    }
-
-    const awayWinProb = 1 - homeWinProb;
-    const homePctDisplay = Math.round(homeWinProb * 100);
-    const awayPctDisplay = 100 - homePctDisplay;
-
-    liveProbContext = {
-      gamePk,
-      awayAbbr: awayAbbrForKalshi, homeAbbr: homeAbbrForKalshi
-    };
-
-    const projection = projectRuns(awayRec, homeRec);
-    const park = applyParkFactor(projection, homeTeam.id);
-
-    const awayFatigueRuns = fatigueRunsAdjustment(awayWorkload);
-    const homeFatigueRuns = fatigueRunsAdjustment(homeWorkload);
-    if (projection && (awayFatigueRuns > 0 || homeFatigueRuns > 0)) {
-      // A fatigued bullpen tends to give up more runs to the opponent when it enters the game.
-      projection.expectedHomeRuns += awayFatigueRuns;
-      projection.expectedAwayRuns += homeFatigueRuns;
-      projection.expectedMargin = projection.expectedHomeRuns - projection.expectedAwayRuns;
-      projection.expectedTotal += awayFatigueRuns + homeFatigueRuns;
-    }
-
-    // Starting pitcher rest: a starter on short rest (3 or fewer days since their last start,
-    // vs. the normal 4-5 day gap) tends to be less effective, so the opponent gets a small bump.
-    function restPenaltyRuns(context) {
-      if (!context || context.pitcherRestDays === null || context.pitcherRestDays === undefined) return 0;
-      return context.pitcherRestDays <= 3 ? 0.15 : 0;
-    }
-    const awayRestPenalty = restPenaltyRuns(awayContext);
-    const homeRestPenalty = restPenaltyRuns(homeContext);
-    if (projection && (awayRestPenalty > 0 || homeRestPenalty > 0)) {
-      projection.expectedHomeRuns += awayRestPenalty;
-      projection.expectedAwayRuns += homeRestPenalty;
-      projection.expectedMargin = projection.expectedHomeRuns - projection.expectedAwayRuns;
-      projection.expectedTotal += awayRestPenalty + homeRestPenalty;
-    }
-
-    // Travel & jet lag: long distance and/or multiple time zones since the last game tends to
-    // slightly suppress a team's own offense. Direction of travel isn't factored in (some
-    // research suggests west-to-east is worse), just magnitude — kept simple and capped.
-    function travelPenaltyRuns(context) {
-      if (!context) return 0;
-      let penalty = 0;
-      if (context.travelMiles && context.travelMiles > 1500) penalty += 0.08;
-      if (context.timezoneShiftHours && Math.abs(context.timezoneShiftHours) >= 2) penalty += 0.08;
-      return Math.min(0.15, penalty);
-    }
-    const awayTravelPenalty = travelPenaltyRuns(awayContext);
-    const homeTravelPenalty = travelPenaltyRuns(homeContext);
-    if (projection && (awayTravelPenalty > 0 || homeTravelPenalty > 0)) {
-      projection.expectedAwayRuns -= awayTravelPenalty;
-      projection.expectedHomeRuns -= homeTravelPenalty;
-      projection.expectedMargin = projection.expectedHomeRuns - projection.expectedAwayRuns;
-      projection.expectedTotal -= (awayTravelPenalty + homeTravelPenalty);
-    }
-
-    let tempAdjustment = 0;
-    if (projection && weather && weather.available && !weather.isDome && typeof weather.tempF === 'number') {
-      // Warmer air is less dense, ball carries slightly further; small, capped, and only applied outdoors.
-      tempAdjustment = Math.max(-0.6, Math.min(0.6, (weather.tempF - 70) * 0.015));
-      projection.expectedTotal += tempAdjustment;
-    }
-
-    let wind = null;
-    if (projection && weather && weather.available && !weather.isDome && park && typeof weather.windDirDeg === 'number' && typeof weather.windMph === 'number') {
-      wind = windEffect(weather.windDirDeg, weather.windMph, park.orientation);
-      if (wind) {
-        // Small, capped, and only moves the total — direction/speed alone can't fully capture
-        // a park's true wind physics, so this is a reasonable nudge, not a precise model.
-        let windAdj = 0;
-        if (wind.direction === 'out') windAdj = Math.min(0.8, wind.windMph * 0.04);
-        else if (wind.direction === 'in') windAdj = -Math.min(0.8, wind.windMph * 0.04);
-        projection.expectedTotal += windAdj;
-      }
-    }
-
-    // Lineup strength: compare today's posted lineup (average OPS of the 9 starters) against
-    // that team's own season OPS. A weaker-than-normal lineup (missing a bat) nudges that
-    // team's own projected runs down; a stronger one nudges up. Small, capped, own-team only —
-    // and only kicks in once lineups are actually posted, typically 1-2 hours before first pitch.
-    function lineupRunsAdjustment(lineupOPS, teamOPS) {
-      if (lineupOPS == null || teamOPS == null) return 0;
-      const opsDelta = lineupOPS - teamOPS;
-      return Math.max(-0.5, Math.min(0.5, opsDelta * 15));
-    }
-    let awayLineupAdj = 0, homeLineupAdj = 0;
-    if (projection && lineup && lineup.lineupsPosted) {
-      awayLineupAdj = lineupRunsAdjustment(lineup.awayLineupOPS, lineup.awayTeamOPS);
-      homeLineupAdj = lineupRunsAdjustment(lineup.homeLineupOPS, lineup.homeTeamOPS);
-      if (awayLineupAdj || homeLineupAdj) {
-        projection.expectedAwayRuns += awayLineupAdj;
-        projection.expectedHomeRuns += homeLineupAdj;
-        projection.expectedMargin = projection.expectedHomeRuns - projection.expectedAwayRuns;
-        projection.expectedTotal += awayLineupAdj + homeLineupAdj;
-      }
-    }
-
-    let defaultTotal = projection ? (Math.round(projection.expectedTotal * 2) / 2).toFixed(1) : '';
-    if (kalshiTotal && kalshiTotal.available && kalshiTotal.lines.length) {
-      defaultTotal = kalshiTotal.lines[0].line;
-    }
-
-    // Default the run line input to whatever Kalshi actually has for this game, not a fixed
-    // guess of 1.5 — so blending applies automatically without needing the button first.
-    let defaultRunLine = 1.5;
-    if (kalshiRL && kalshiRL.available && kalshiRL.lines.length) {
-      defaultRunLine = kalshiRL.lines[0].line;
-    }
-
-    el.innerHTML = `
-      <div class="matchup">
-        <div class="scoreboard">
-          <div class="team">
-            <div class="name">${awayTeam.name}</div>
-            <div class="record">${awayRec ? awayRec.leagueRecord.wins + '-' + awayRec.leagueRecord.losses : '—'}</div>
-          </div>
-          <div class="at">@</div>
-          <div class="team">
-            <div class="name">${homeTeam.name}</div>
-            <div class="record">${homeRec ? homeRec.leagueRecord.wins + '-' + homeRec.leagueRecord.losses : '—'}</div>
-          </div>
-        </div>
-        <div id="liveStatus" style="text-align:center; padding:8px 18px; background:var(--field-dark); color:var(--chalk); font-size:13px; letter-spacing:0.5px;">
-          ${statusLabel(game)}
-        </div>
-        <div class="probbar-wrap">
-          <div class="probbar-nums-big">
-            <div><span class="pct away" id="awayPctNum">${awayPctDisplay}%</span><span class="abbr">${awayTeam.abbreviation || 'AWAY'}</span></div>
-            <div style="text-align:right;"><span class="pct home" id="homePctNum">${homePctDisplay}%</span><span class="abbr">${homeTeam.abbreviation || 'HOME'}</span></div>
-          </div>
-          <div class="probbar">
-            <div class="away" id="awayPctBar" style="width:${awayPctDisplay}%"></div>
-            <div class="home" id="homePctBar" style="width:${homePctDisplay}%"></div>
-          </div>
-          <div class="probbar-caption" id="probCaption">Chance to win — based on team strength, recent form, ballpark, and today's starters${h2h && h2h.gamesPlayed > 0 ? `<br>Season series: ${awayTeam.abbreviation || 'Away'} ${h2h.wins}-${h2h.losses} vs ${homeTeam.abbreviation || 'Home'}${h2h.gamesPlayed < 3 ? ' (too few games to count yet)' : ''}` : ''}</div>
-          <div id="kalshiMovement" style="text-align:center; font-size:11px; color:var(--accent); margin-top:6px;">${kalshiMovement ? `Kalshi line moved ${Math.abs(Math.round(kalshiMovement.delta * 100))}pt toward ${kalshiMovement.delta > 0 ? homeAbbrForKalshi : awayAbbrForKalshi} over the last ${kalshiMovement.minutesAgo} min` : ''}</div>
-        </div>
-
-        <div class="bet-tabs">
-          <button class="bet-tab active" data-panel="panel-moneyline"><span class="glyph">$</span> Moneyline</button>
-          <button class="bet-tab" data-panel="panel-runline"><span class="glyph">⟷</span> Run Line</button>
-          <button class="bet-tab" data-panel="panel-total"><span class="glyph">⇅</span> Total</button>
-        </div>
-
-        <div class="bet-panel" id="panel-moneyline">
-          <p class="plain-hint">Pick who wins. Type in the odds from your book — we'll tell you the implied chance those odds represent, and whether our estimate is higher or lower ("edge"). Or pull live odds from Kalshi instead of typing your own.</p>
-          <button class="log-bet-btn" id="kalshiBtn" style="margin-bottom:12px;">Checking Kalshi…</button>
-          <div class="odds-row">
-            <div class="odds-field"><label>${awayTeam.abbreviation || 'Away'} odds</label><input type="text" id="awayOdds" placeholder="e.g. +130"></div>
-            <div class="odds-field"><label>${homeTeam.abbreviation || 'Home'} odds</label><input type="text" id="homeOdds" placeholder="e.g. -150"></div>
-          </div>
-          <div id="resultBox"></div>
-        </div>
-
-        <div class="bet-panel" id="panel-runline" style="display:none;">
-          <p class="plain-hint">Pick who wins by more than the line. Sportsbooks usually use ±1.5, but Kalshi's line varies by game — this defaults to whatever Kalshi actually has, so edit it to match your own book if different. ${projection ? `We project the score around ${projection.expectedHomeRuns.toFixed(1)} - ${projection.expectedAwayRuns.toFixed(1)} (home).` : "Not enough run data yet for this matchup."}</p>
-          ${projection ? `
-          <button class="log-bet-btn" id="kalshiRLBtn" style="margin-bottom:12px;">Checking Kalshi…</button>
-          <div class="odds-row">
-            <div class="odds-field"><label>Line (home side)</label><input type="text" id="runLineNum" value="-${defaultRunLine}" placeholder="e.g. -1.5"></div>
-            <div class="odds-field"></div>
-          </div>
-          <div class="odds-row">
-            <div class="odds-field"><label>${awayTeam.abbreviation || 'Away'} +${defaultRunLine} odds</label><input type="text" id="awayRLOdds" placeholder="e.g. -130"></div>
-            <div class="odds-field"><label>${homeTeam.abbreviation || 'Home'} -${defaultRunLine} odds</label><input type="text" id="homeRLOdds" placeholder="e.g. +110"></div>
-          </div>
-          <div id="runLineResultBox"></div>
-          ` : ''}
-        </div>
-
-        <div class="bet-panel" id="panel-total" style="display:none;">
-          <p class="plain-hint">Pick whether total runs scored lands over or under a number. ${projection ? `We project ${projection.expectedTotal.toFixed(1)} total runs${park ? ` at ${park.name}` : ''}.` : "Not enough run data yet for this matchup."}</p>
-          ${projection ? `
-          <button class="log-bet-btn" id="kalshiTotalBtn" style="margin-bottom:12px;">Checking Kalshi…</button>
-          <div class="odds-row">
-            <div class="odds-field"><label>Total line</label><input type="text" id="totalNum" value="${defaultTotal}" placeholder="e.g. 8.5"></div>
-            <div class="odds-field"></div>
-          </div>
-          <div class="odds-row">
-            <div class="odds-field"><label>Over odds</label><input type="text" id="overOdds" placeholder="e.g. -110"></div>
-            <div class="odds-field"><label>Under odds</label><input type="text" id="underOdds" placeholder="e.g. -110"></div>
-          </div>
-          <div id="totalResultBox"></div>
-          ` : ''}
-        </div>
-
-
-        <details class="game-details">
-          <summary>Game details — starters, weather, lineups, injuries</summary>
-          <div class="details-inner">
-            <div class="detail-block">
-              <div class="detail-title">Starting pitchers</div>
-              <div class="detail-cols">
-                <div>${awayPitcher ? awayPitcher.fullName : 'TBD'}${awayERA ? `<br>ERA ${awayERA.era.toFixed(2)}${awayERA.fip !== null ? ` · FIP ${awayERA.fip.toFixed(2)}` : ''}` : '<br>No stats yet'}</div>
-                <div>${homePitcher ? homePitcher.fullName : 'TBD'}${homeERA ? `<br>ERA ${homeERA.era.toFixed(2)}${homeERA.fip !== null ? ` · FIP ${homeERA.fip.toFixed(2)}` : ''}` : '<br>No stats yet'}</div>
-              </div>
-            </div>
-
-            ${park || (weather && weather.available) ? `
-            <div class="detail-block">
-              <div class="detail-title">Park & weather</div>
-              <div class="chip-row">
-                ${park ? `<span class="chip">${park.name} · ${park.factor > 102 ? 'hitter-friendly' : (park.factor < 98 ? 'pitcher-friendly' : 'neutral')} (${park.factor})</span>` : ''}
-                ${weather && weather.isDome ? `<span class="chip">Roof/dome — no wind effect</span>` : ''}
-                ${weather && weather.available && !weather.isDome ? `
-                  <span class="chip">${Math.round(weather.tempF)}°F</span>
-                  <span class="chip ${wind ? (wind.direction === 'out' ? 'chip-out' : (wind.direction === 'in' ? 'chip-in' : '')) : ''}">Wind ${Math.round(weather.windMph)} mph${wind ? ` ${wind.direction === 'out' ? '↑ out' : (wind.direction === 'in' ? '↓ in' : '↔ cross')}` : ''}</span>
-                  ${weather.precipNow > 0 ? `<span class="chip">🌧 Raining now</span>` : ''}
-                ` : ''}
-              </div>
-              ${weather && weather.available && !weather.isDome ? `<div style="font-size:10.5px; color:var(--ink-soft); margin-top:6px;">Current conditions, not a first-pitch forecast</div>` : ''}
-            </div>
-            ` : ''}
-
-            ${(awayWorkload || homeWorkload) ? `
-            <div class="detail-block">
-              <div class="detail-title">Bullpen workload (last 3 days)</div>
-              <div class="chip-row">
-                <span class="chip">${awayTeam.abbreviation || 'Away'} ${awayWorkload ? awayWorkload.gamesInLast3Days + ' games' + (awayWorkload.doubleHeaderRecently ? ' + dbl-header' : '') : '—'}</span>
-                <span class="chip">${homeTeam.abbreviation || 'Home'} ${homeWorkload ? homeWorkload.gamesInLast3Days + ' games' + (homeWorkload.doubleHeaderRecently ? ' + dbl-header' : '') : '—'}</span>
-              </div>
-            </div>
-            ` : ''}
-
-            ${(awayContext || homeContext) ? `
-            <div class="detail-block">
-              <div class="detail-title">Starter rest &amp; travel</div>
-              <div class="chip-row">
-                ${awayContext && awayContext.pitcherRestDays != null ? `<span class="chip ${awayContext.pitcherRestDays <= 3 ? 'chip-out' : ''}">${awayTeam.abbreviation} starter: ${awayContext.pitcherRestDays}d rest</span>` : ''}
-                ${homeContext && homeContext.pitcherRestDays != null ? `<span class="chip ${homeContext.pitcherRestDays <= 3 ? 'chip-out' : ''}">${homeTeam.abbreviation} starter: ${homeContext.pitcherRestDays}d rest</span>` : ''}
-                ${awayContext && awayContext.travelMiles ? `<span class="chip ${awayContext.travelMiles > 1500 ? 'chip-out' : ''}">${awayTeam.abbreviation} traveled ${awayContext.travelMiles}mi${awayContext.timezoneShiftHours ? ` (~${Math.abs(awayContext.timezoneShiftHours)}tz)` : ''}</span>` : ''}
-                ${homeContext && homeContext.travelMiles ? `<span class="chip ${homeContext.travelMiles > 1500 ? 'chip-out' : ''}">${homeTeam.abbreviation} traveled ${homeContext.travelMiles}mi${homeContext.timezoneShiftHours ? ` (~${Math.abs(homeContext.timezoneShiftHours)}tz)` : ''}</span>` : ''}
-              </div>
-              <div style="font-size:10.5px; color:var(--ink-soft); margin-top:6px;">Short rest (≤3 days) and long travel/timezone shifts get small, capped nudges in run line &amp; total — not moneyline directly.</div>
-            </div>
-            ` : ''}
-
-            <div class="detail-block">
-              <div class="detail-title">Starting lineups</div>
-              ${lineup && lineup.lineupsPosted ? `
-                ${(lineup.awayLineupOPS || lineup.homeLineupOPS) ? `
-                  <div class="chip-row" style="margin-bottom:10px;">
-                    ${lineup.awayLineupOPS && lineup.awayTeamOPS ? `<span class="chip ${awayLineupAdj > 0.02 ? 'chip-in' : (awayLineupAdj < -0.02 ? 'chip-out' : '')}">${awayTeam.abbreviation} lineup OPS ${lineup.awayLineupOPS.toFixed(3)} (season ${lineup.awayTeamOPS.toFixed(3)})</span>` : ''}
-                    ${lineup.homeLineupOPS && lineup.homeTeamOPS ? `<span class="chip ${homeLineupAdj > 0.02 ? 'chip-in' : (homeLineupAdj < -0.02 ? 'chip-out' : '')}">${homeTeam.abbreviation} lineup OPS ${lineup.homeLineupOPS.toFixed(3)} (season ${lineup.homeTeamOPS.toFixed(3)})</span>` : ''}
-                  </div>
-                  <div style="font-size:10.5px; color:var(--ink-soft); margin-bottom:10px;">A lineup notably weaker or stronger than that team's own season average nudges their projected runs — small and capped, already folded into run line and total above.</div>
-                ` : ''}
-                <div class="detail-cols">
-                  <div class="lineup-list">${lineup.awayLineup.map((p, i) => `<div class="lineup-row"><span class="lineup-num">${i + 1}</span><span class="lineup-name">${p.name}</span><span class="lineup-pos">${p.position}</span></div>`).join('')}</div>
-                  <div class="lineup-list">${lineup.homeLineup.map((p, i) => `<div class="lineup-row"><span class="lineup-num">${i + 1}</span><span class="lineup-name">${p.name}</span><span class="lineup-pos">${p.position}</span></div>`).join('')}</div>
-                </div>
-              ` : `<span style="color:var(--ink-soft);">Not posted yet — usually available 1-2 hours before first pitch.</span>`}
-            </div>
-
-            ${(awayMoves && awayMoves.transactions.length) || (homeMoves && homeMoves.transactions.length) ? `
-            <div class="detail-block">
-              <div class="detail-title">Recent injured-list moves</div>
-              <div class="detail-cols">
-                <div>${awayMoves && awayMoves.transactions.length ? awayMoves.transactions.map(t => `${t.date}: ${t.description}`).join('<br>') : 'None in last 14 days'}</div>
-                <div>${homeMoves && homeMoves.transactions.length ? homeMoves.transactions.map(t => `${t.date}: ${t.description}`).join('<br>') : 'None in last 14 days'}</div>
-              </div>
-            </div>
-            ` : ''}
-          </div>
-        </details>
+        <div class="pct mono">${pct}%</div>
       </div>
     `;
+  }
 
-    currentMatchup = {
-      gamePk,
-      awayAbbr: awayTeam.abbreviation || 'AWAY',
-      homeAbbr: homeTeam.abbreviation || 'HOME',
-      awayName: awayTeam.name,
-      homeName: homeTeam.name,
-      gameDate: game.gameDate
-    };
+  function renderGame(g) {
+    const homePct = Math.round(g.homeWinProb * 100);
+    const awayPct = 100 - homePct;
 
-    el.querySelectorAll('.bet-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        el.querySelectorAll('.bet-tab').forEach(t => t.classList.remove('active'));
-        el.querySelectorAll('.bet-panel').forEach(p => p.style.display = 'none');
-        tab.classList.add('active');
-        document.getElementById(tab.dataset.panel).style.display = '';
-      });
-    });
+    return `
+      <div class="game-card">
+        <div class="kickoff mono">${formatKickoff(g.kickoff)}</div>
+        ${teamRow(g.away, awayPct, 'away')}
+        <div class="bar">
+          <div class="fill-away" style="width:${awayPct}%"></div>
+          <div class="fill-home" style="width:${homePct}%"></div>
+        </div>
+        ${teamRow(g.home, homePct, 'home')}
+      </div>
+    `;
+  }
 
-    const awayInput = document.getElementById('awayOdds');
-    const homeInput = document.getElementById('homeOdds');
-    const compute = () => computeEdge(awayInput.value, homeInput.value, awayWinProb, homeWinProb, awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME');
-    awayInput.addEventListener('input', compute);
-    homeInput.addEventListener('input', compute);
-
-    const kalshiBtn = document.getElementById('kalshiBtn');
-    async function fillMoneylineFromKalshi(k) {
-      if (!k || !k.available) {
-        kalshiBtn.textContent = 'No Kalshi market found for this game';
-        setTimeout(() => { kalshiBtn.textContent = 'Refresh Kalshi odds'; kalshiBtn.disabled = false; }, 2500);
-        return false;
-      }
-      const homeAbbr = homeTeam.abbreviation || 'HOME';
-      const awayAbbr = awayTeam.abbreviation || 'AWAY';
-      let homeProb, awayProb;
-      if (k.yesTeam === homeAbbr) {
-        homeProb = k.yesProb; awayProb = 1 - k.yesProb;
-      } else if (k.yesTeam === awayAbbr) {
-        awayProb = k.yesProb; homeProb = 1 - k.yesProb;
-      } else {
-        kalshiBtn.textContent = "Found a market but couldn't match teams";
-        setTimeout(() => { kalshiBtn.textContent = 'Refresh Kalshi odds'; kalshiBtn.disabled = false; }, 2500);
-        return false;
-      }
-      const homeOddsVal = probToAmerican(homeProb);
-      const awayOddsVal = probToAmerican(awayProb);
-      awayInput.value = awayOddsVal > 0 ? `+${awayOddsVal}` : `${awayOddsVal}`;
-      homeInput.value = homeOddsVal > 0 ? `+${homeOddsVal}` : `${homeOddsVal}`;
-      compute();
-      return true;
+  function render(games) {
+    const container = document.getElementById('games');
+    if (!games.length) {
+      container.innerHTML = '<div class="status">No games scheduled.</div>';
+      return;
     }
-
-    if (kalshiML && kalshiML.available) {
-      const ok = fillMoneylineFromKalshi(kalshiML);
-      if (ok) {
-        kalshiBtn.textContent = 'Live from Kalshi ✓';
-        kalshiBtn.disabled = false;
-      }
-    } else {
-      kalshiBtn.textContent = 'No Kalshi market found for this game';
-    }
-
-    kalshiBtn.addEventListener('click', async () => {
-      kalshiBtn.textContent = 'Checking Kalshi…';
-      kalshiBtn.disabled = true;
-      const k = await getKalshiOdds(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME');
-      const ok = await fillMoneylineFromKalshi(k);
-      if (ok) {
-        kalshiBtn.textContent = 'Updated from Kalshi ✓';
-        kalshiBtn.disabled = false;
-        setTimeout(() => { kalshiBtn.textContent = 'Refresh Kalshi odds'; }, 2500);
-      }
-    });
-
-    if (projection) {
-      const runLineNumInput = document.getElementById('runLineNum');
-      const awayRLInput = document.getElementById('awayRLOdds');
-      const homeRLInput = document.getElementById('homeRLOdds');
-      const computeRL = () => {
-        const lineVal = parseFloat(runLineNumInput.value);
-        if (isNaN(lineVal)) { document.getElementById('runLineResultBox').innerHTML = ''; return; }
-        const probs = runLineProbs(projection, Math.abs(lineVal));
-        computeRunLineEdge(awayRLInput.value, homeRLInput.value, probs, awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME', Math.abs(lineVal));
-      };
-      runLineNumInput.addEventListener('input', computeRL);
-      awayRLInput.addEventListener('input', computeRL);
-      homeRLInput.addEventListener('input', computeRL);
-
-      const kalshiRLBtn = document.getElementById('kalshiRLBtn');
-      function fillRunLineFromKalshi(k) {
-        if (!k || !k.available || !k.lines.length) {
-          kalshiRLBtn.textContent = 'No Kalshi run line found for this game';
-          setTimeout(() => { kalshiRLBtn.textContent = 'Refresh Kalshi run line'; kalshiRLBtn.disabled = false; }, 2500);
-          return false;
-        }
-        const line = k.lines[0]; // typically only one spread line offered per game
-        const homeAbbr = homeTeam.abbreviation || 'HOME';
-        const awayAbbr = awayTeam.abbreviation || 'AWAY';
-        let homeProb, awayProb;
-        if (line.favoredTeam === homeAbbr) { homeProb = line.yesProb; awayProb = 1 - line.yesProb; }
-        else if (line.favoredTeam === awayAbbr) { awayProb = line.yesProb; homeProb = 1 - line.yesProb; }
-        else {
-          kalshiRLBtn.textContent = "Found a line but couldn't match teams";
-          setTimeout(() => { kalshiRLBtn.textContent = 'Refresh Kalshi run line'; kalshiRLBtn.disabled = false; }, 2500);
-          return false;
-        }
-        runLineNumInput.value = `-${line.line}`;
-        awayRLInput.value = probToAmerican(awayProb) > 0 ? `+${probToAmerican(awayProb)}` : `${probToAmerican(awayProb)}`;
-        homeRLInput.value = probToAmerican(homeProb) > 0 ? `+${probToAmerican(homeProb)}` : `${probToAmerican(homeProb)}`;
-        computeRL();
-        return true;
-      }
-
-      if (kalshiRL && kalshiRL.available) {
-        const ok = fillRunLineFromKalshi(kalshiRL);
-        if (ok) {
-          kalshiRLBtn.textContent = 'Live from Kalshi ✓';
-          kalshiRLBtn.disabled = false;
-        }
-      } else {
-        kalshiRLBtn.textContent = 'No Kalshi run line found for this game';
-      }
-
-      kalshiRLBtn.addEventListener('click', async () => {
-        kalshiRLBtn.textContent = 'Checking Kalshi…';
-        kalshiRLBtn.disabled = true;
-        const k = await getKalshiRunLine(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME');
-        const ok = fillRunLineFromKalshi(k);
-        if (ok) {
-          kalshiRLBtn.textContent = 'Updated from Kalshi ✓';
-          kalshiRLBtn.disabled = false;
-          setTimeout(() => { kalshiRLBtn.textContent = 'Refresh Kalshi run line'; }, 2500);
-        }
-      });
-
-      const totalNumInput = document.getElementById('totalNum');
-      const overInput = document.getElementById('overOdds');
-      const underInput = document.getElementById('underOdds');
-      const computeTotal = () => {
-        const totalVal = parseFloat(totalNumInput.value);
-        if (isNaN(totalVal)) { document.getElementById('totalResultBox').innerHTML = ''; return; }
-        const probs = totalProbs(projection, totalVal);
-        computeTotalEdge(overInput.value, underInput.value, probs, totalVal);
-      };
-      totalNumInput.addEventListener('input', computeTotal);
-      overInput.addEventListener('input', computeTotal);
-      underInput.addEventListener('input', computeTotal);
-
-      const kalshiTotalBtn = document.getElementById('kalshiTotalBtn');
-      function fillTotalFromKalshi(k) {
-        if (!k || !k.available || !k.lines.length) {
-          kalshiTotalBtn.textContent = 'No Kalshi total found for this game';
-          setTimeout(() => { kalshiTotalBtn.textContent = 'Refresh Kalshi total'; kalshiTotalBtn.disabled = false; }, 2500);
-          return false;
-        }
-        const line = k.lines[0]; // typically only one total line offered per game
-        const overOddsVal = probToAmerican(line.overProb);
-        const underOddsVal = probToAmerican(1 - line.overProb);
-        totalNumInput.value = line.line;
-        overInput.value = overOddsVal > 0 ? `+${overOddsVal}` : `${overOddsVal}`;
-        underInput.value = underOddsVal > 0 ? `+${underOddsVal}` : `${underOddsVal}`;
-        computeTotal();
-        return true;
-      }
-
-      if (kalshiTotal && kalshiTotal.available) {
-        const ok = fillTotalFromKalshi(kalshiTotal);
-        if (ok) {
-          kalshiTotalBtn.textContent = 'Live from Kalshi ✓ (not blended into model)';
-          kalshiTotalBtn.disabled = false;
-        }
-      } else {
-        kalshiTotalBtn.textContent = 'No Kalshi total found for this game';
-      }
-
-      kalshiTotalBtn.addEventListener('click', async () => {
-        kalshiTotalBtn.textContent = 'Checking Kalshi…';
-        kalshiTotalBtn.disabled = true;
-        const k = await getKalshiTotal(awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME');
-        const ok = fillTotalFromKalshi(k);
-        if (ok) {
-          kalshiTotalBtn.textContent = 'Updated from Kalshi ✓ (not blended into model)';
-          kalshiTotalBtn.disabled = false;
-          setTimeout(() => { kalshiTotalBtn.textContent = 'Refresh Kalshi total'; }, 3000);
-        }
-      });
-    }
-
-  } catch (err) {
-    el.innerHTML = `<div class="error-box">Couldn't compute this matchup: ${err.message}</div>`;
-  }
-}
-
-function americanToImplied(odds) {
-  const n = parseFloat(odds);
-  if (isNaN(n) || n === 0) return null;
-  if (n > 0) return 100 / (n + 100);
-  return -n / (-n + 100);
-}
-
-function computeEdge(awayOddsStr, homeOddsStr, awayModelProb, homeModelProb, awayAbbr, homeAbbr) {
-  const box = document.getElementById('resultBox');
-  const awayImplied = americanToImplied(awayOddsStr);
-  const homeImplied = americanToImplied(homeOddsStr);
-  lastEdgeState = { awayAbbr, homeAbbr, awayOddsStr, homeOddsStr, awayImplied, homeImplied, awayModelProb, homeModelProb };
-  if (awayImplied === null && homeImplied === null) { box.innerHTML = ''; return; }
-
-  function colHTML(abbr, implied, modelProb, side) {
-    if (implied === null) return `<div class="col"><div class="team-abbr">${abbr}</div><div class="implied">—</div></div>`;
-    const edge = (modelProb - implied) * 100;
-    const edgeClass = edge > 0 ? 'edge-pos' : (edge < 0 ? 'edge-neg' : '');
-    const edgeText = edge > 0 ? `+${edge.toFixed(1)}% model edge` : `${edge.toFixed(1)}% vs model`;
-    const edgeSpanClass = edge > 0 ? 'pos' : 'neg';
-    return `<div class="col ${edgeClass}">
-      <div class="team-abbr">${abbr}</div>
-      <div class="implied">${(implied * 100).toFixed(1)}%</div>
-      <div class="edge ${edgeSpanClass}">${edgeText}</div>
-      <button class="log-bet-btn" onclick="logBet('moneyline','${side}')">Log bet</button>
-    </div>`;
+    container.innerHTML = games.map(renderGame).join('');
   }
 
-  box.innerHTML = `<div class="result">${colHTML(awayAbbr, awayImplied, awayModelProb, 'away')}${colHTML(homeAbbr, homeImplied, homeModelProb, 'home')}</div>`;
-}
-
-function computeRunLineEdge(awayOddsStr, homeOddsStr, probs, awayAbbr, homeAbbr, lineVal) {
-  const box = document.getElementById('runLineResultBox');
-  const awayImplied = americanToImplied(awayOddsStr);
-  const homeImplied = americanToImplied(homeOddsStr);
-  lastRunLineState = {
-    awayAbbr, homeAbbr, lineVal,
-    awayOddsStr, homeOddsStr, awayImplied, homeImplied,
-    awayModelProb: probs ? probs.away : null,
-    homeModelProb: probs ? probs.home : null
-  };
-  if (!probs || (awayImplied === null && homeImplied === null)) { box.innerHTML = ''; return; }
-
-  function colHTML(label, implied, modelProb, side) {
-    if (implied === null) return `<div class="col"><div class="team-abbr">${label}</div><div class="implied">—</div></div>`;
-    const edge = (modelProb - implied) * 100;
-    const edgeClass = edge > 0 ? 'edge-pos' : (edge < 0 ? 'edge-neg' : '');
-    const edgeText = edge > 0 ? `+${edge.toFixed(1)}% model edge` : `${edge.toFixed(1)}% vs model`;
-    const edgeSpanClass = edge > 0 ? 'pos' : 'neg';
-    return `<div class="col ${edgeClass}">
-      <div class="team-abbr">${label}</div>
-      <div class="implied">${(implied * 100).toFixed(1)}%</div>
-      <div class="edge ${edgeSpanClass}">${edgeText}</div>
-      <button class="log-bet-btn" onclick="logBet('runline','${side}')">Log bet</button>
-    </div>`;
-  }
-
-  box.innerHTML = `<div class="result">${colHTML(`${awayAbbr} +${lineVal}`, awayImplied, probs.away, 'away')}${colHTML(`${homeAbbr} -${lineVal}`, homeImplied, probs.home, 'home')}</div>`;
-}
-
-function computeTotalEdge(overOddsStr, underOddsStr, probs, totalVal) {
-  const box = document.getElementById('totalResultBox');
-  const overImplied = americanToImplied(overOddsStr);
-  const underImplied = americanToImplied(underOddsStr);
-  lastTotalState = {
-    totalVal,
-    overOddsStr, underOddsStr, overImplied, underImplied,
-    overModelProb: probs ? probs.over : null,
-    underModelProb: probs ? probs.under : null
-  };
-  if (!probs || (overImplied === null && underImplied === null)) { box.innerHTML = ''; return; }
-
-  function colHTML(label, implied, modelProb, side) {
-    if (implied === null) return `<div class="col"><div class="team-abbr">${label}</div><div class="implied">—</div></div>`;
-    const edge = (modelProb - implied) * 100;
-    const edgeClass = edge > 0 ? 'edge-pos' : (edge < 0 ? 'edge-neg' : '');
-    const edgeText = edge > 0 ? `+${edge.toFixed(1)}% model edge` : `${edge.toFixed(1)}% vs model`;
-    const edgeSpanClass = edge > 0 ? 'pos' : 'neg';
-    return `<div class="col ${edgeClass}">
-      <div class="team-abbr">${label}</div>
-      <div class="implied">${(implied * 100).toFixed(1)}%</div>
-      <div class="edge ${edgeSpanClass}">${edgeText}</div>
-      <button class="log-bet-btn" onclick="logBet('total','${side}')">Log bet</button>
-    </div>`;
-  }
-
-  box.innerHTML = `<div class="result">${colHTML(`Over ${totalVal}`, overImplied, probs.over, 'over')}${colHTML(`Under ${totalVal}`, underImplied, probs.under, 'under')}</div>`;
-}
-
-document.getElementById('prevDay').addEventListener('click', () => {
-  currentDate.setDate(currentDate.getDate() - 1);
-  loadGames();
-});
-document.getElementById('nextDay').addEventListener('click', () => {
-  currentDate.setDate(currentDate.getDate() + 1);
-  loadGames();
-});
-
-async function refreshLiveScores() {
-  try {
-    const dateStr = fmtDate(currentDate);
-    const data = await fetchJSON(`/api/schedule?date=${dateStr}`);
-    const dates = data.dates || [];
-    const freshGames = dates.length ? dates[0].games : [];
-    gamesCache = freshGames;
-
-    document.querySelectorAll('.game-row').forEach(el => {
-      const g = freshGames.find(x => String(x.gamePk) === el.dataset.gameId);
-      if (g) {
-        const timeSpan = el.querySelector('.matchup-time');
-        if (timeSpan) timeSpan.innerHTML = statusLabel(g);
-      }
-    });
-
-    if (openGameId) {
-      const g = freshGames.find(x => String(x.gamePk) === String(openGameId));
-      const statusEl = document.getElementById('liveStatus');
-      if (g && statusEl) statusEl.innerHTML = statusLabel(g);
-    }
-  } catch (e) {
-    // silent fail on background refresh
-  }
-}
-
-setInterval(refreshLiveScores, 30000);
-
-async function refreshLiveProbability() {
-  if (!liveProbContext) return;
-  const { gamePk, awayAbbr, homeAbbr } = liveProbContext;
-  if (String(openGameId) !== String(gamePk)) return;
-
-  const k = await getKalshiOdds(awayAbbr, homeAbbr);
-  let kalshiHomeProb = null;
-  if (k && k.available) {
-    if (k.yesTeam === homeAbbr) kalshiHomeProb = k.yesProb;
-    else if (k.yesTeam === awayAbbr) kalshiHomeProb = 1 - k.yesProb;
-  }
-  if (kalshiHomeProb === null) return; // no fresh price
-
-  recordKalshiSnapshot(gamePk, kalshiHomeProb);
-  const movement = getKalshiMovement(gamePk, kalshiHomeProb);
-
-  // Our model's own probability doesn't change here — only the Kalshi movement note updates,
-  // since the model number is no longer blended with the market.
-  const movementEl = document.getElementById('kalshiMovement');
-  if (movementEl) {
-    movementEl.textContent = movement
-      ? `Kalshi line moved ${Math.abs(Math.round(movement.delta * 100))}pt toward ${movement.delta > 0 ? homeAbbr : awayAbbr} over the last ${movement.minutesAgo} min`
-      : '';
-  }
-}
-
-setInterval(refreshLiveProbability, 20000);
-
-// ---- Bet tracking ----
-let currentMatchup = null;
-let lastEdgeState = null;
-let lastRunLineState = null;
-let lastTotalState = null;
-
-const BETS_KEY = 'lineScoreBets';
-function loadBets() {
-  try { return JSON.parse(localStorage.getItem(BETS_KEY)) || []; }
-  catch (e) { return []; }
-}
-function saveBets(bets) {
-  localStorage.setItem(BETS_KEY, JSON.stringify(bets));
-}
-
-function logBet(betType, side) {
-  if (!currentMatchup) return;
-  let oddsStr, modelProb, label, line = null;
-
-  if (betType === 'moneyline') {
-    if (!lastEdgeState) return;
-    const isAway = side === 'away';
-    oddsStr = isAway ? lastEdgeState.awayOddsStr : lastEdgeState.homeOddsStr;
-    modelProb = isAway ? lastEdgeState.awayModelProb : lastEdgeState.homeModelProb;
-    label = isAway ? `${currentMatchup.awayName} ML` : `${currentMatchup.homeName} ML`;
-  } else if (betType === 'runline') {
-    if (!lastRunLineState) return;
-    const isAway = side === 'away';
-    oddsStr = isAway ? lastRunLineState.awayOddsStr : lastRunLineState.homeOddsStr;
-    modelProb = isAway ? lastRunLineState.awayModelProb : lastRunLineState.homeModelProb;
-    line = lastRunLineState.lineVal;
-    label = isAway
-      ? `${currentMatchup.awayName} +${lastRunLineState.lineVal}`
-      : `${currentMatchup.homeName} -${lastRunLineState.lineVal}`;
-  } else if (betType === 'total') {
-    if (!lastTotalState) return;
-    const isOver = side === 'over';
-    oddsStr = isOver ? lastTotalState.overOddsStr : lastTotalState.underOddsStr;
-    modelProb = isOver ? lastTotalState.overModelProb : lastTotalState.underModelProb;
-    line = lastTotalState.totalVal;
-    label = `${isOver ? 'Over' : 'Under'} ${lastTotalState.totalVal}`;
-  } else {
-    return;
-  }
-
-  if (!oddsStr || modelProb === null || modelProb === undefined) return;
-
-  const bets = loadBets();
-  bets.unshift({
-    id: `${currentMatchup.gamePk}-${betType}-${side}-${Date.now()}`,
-    gamePk: currentMatchup.gamePk,
-    matchup: `${currentMatchup.awayAbbr} @ ${currentMatchup.homeAbbr}`,
-    betType,
-    side, // 'away' | 'home' | 'over' | 'under' — used for auto-grading
-    line, // numeric line for runline/total, null for moneyline
-    awayAbbr: currentMatchup.awayAbbr,
-    homeAbbr: currentMatchup.homeAbbr,
-    team: label,
-    abbr: label,
-    odds: oddsStr,
-    modelProb,
-    loggedAt: new Date().toISOString(),
-    gameDate: currentMatchup.gameDate,
-    result: null
-  });
-  saveBets(bets);
-
-  const boxId = betType === 'moneyline' ? 'resultBox' : (betType === 'runline' ? 'runLineResultBox' : 'totalResultBox');
-  const box = document.getElementById(boxId);
-  const note = document.createElement('div');
-  note.style.cssText = 'text-align:center;font-size:12px;color:var(--field);margin-top:8px;';
-  note.textContent = `Logged: ${label} at ${oddsStr}`;
-  box.appendChild(note);
-}
-
-function setBetResult(id, result) {
-  const bets = loadBets();
-  const bet = bets.find(b => b.id === id);
-  if (bet) bet.result = result;
-  saveBets(bets);
-  renderBetsView();
-}
-
-function deleteBet(id) {
-  const bets = loadBets().filter(b => b.id !== id);
-  saveBets(bets);
-  renderBetsView();
-}
-
-function gradeSinglePick(pick, game) {
-  if (!game || !game.status || game.status.abstractGameState !== 'Final') return null;
-  const homeScore = game.teams.home.score;
-  const awayScore = game.teams.away.score;
-  if (homeScore == null || awayScore == null) return null;
-
-  if (pick.betType === 'moneyline' || pick.betType === 'ML') {
-    if (pick.side === 'home') return homeScore > awayScore;
-    if (pick.side === 'away') return awayScore > homeScore;
-    return null;
-  }
-  if (pick.betType === 'runline' || pick.betType === 'RL') {
-    if (pick.line == null) return null;
-    const homeMargin = homeScore - awayScore;
-    if (pick.side === 'home') return homeMargin > pick.line;
-    if (pick.side === 'away') return homeMargin < pick.line;
-    return null;
-  }
-  if (pick.betType === 'total' || pick.betType === 'TOT') {
-    if (pick.line == null) return null;
-    const total = homeScore + awayScore;
-    if (pick.side === 'over') return total > pick.line;
-    if (pick.side === 'under') return total < pick.line;
-    return null;
-  }
-  return null;
-}
-
-async function autoGradeBets() {
-  const bets = loadBets();
-  const pending = bets.filter(b => b.result !== 'won' && b.result !== 'lost');
-  if (!pending.length) return false;
-
-  const dateSet = new Set();
-  pending.forEach(b => {
-    if (b.legs) {
-      b.legs.forEach(l => { if (l.gameDate) dateSet.add(fmtDate(new Date(l.gameDate))); });
-    } else if (b.gameDate) {
-      dateSet.add(fmtDate(new Date(b.gameDate)));
-    }
-  });
-  if (!dateSet.size) return false;
-
-  const gameLookup = new Map();
-  for (const dateStr of dateSet) {
+  (async () => {
+    const weekLabel = document.getElementById('week-label');
+    const container = document.getElementById('games');
     try {
-      const data = await fetchJSON(`/api/schedule?date=${dateStr}`);
-      const dates = data.dates || [];
-      const games = dates.length ? dates[0].games : [];
-      games.forEach(g => gameLookup.set(String(g.gamePk), g));
-    } catch (e) { /* skip this date on failure, try again next time */ }
-  }
-
-  let changed = false;
-  pending.forEach(b => {
-    if (b.legs) {
-      // Parlay: any confirmed loss settles it immediately; otherwise all legs must be decided wins.
-      let anyLost = false;
-      let allDecided = true;
-      for (const l of b.legs) {
-        const outcome = gradeSinglePick(l, gameLookup.get(String(l.gamePk)));
-        if (outcome === false) { anyLost = true; break; }
-        if (outcome === null) allDecided = false;
-      }
-      if (anyLost) { b.result = 'lost'; changed = true; }
-      else if (allDecided) { b.result = 'won'; changed = true; }
-    } else {
-      const outcome = gradeSinglePick(b, gameLookup.get(String(b.gamePk)));
-      if (outcome === true) { b.result = 'won'; changed = true; }
-      else if (outcome === false) { b.result = 'lost'; changed = true; }
+      const { week, season, games } = await loadGames();
+      weekLabel.textContent = week ? `Week ${week} · ${season}` : `${season}`;
+      render(games);
+    } catch (err) {
+      weekLabel.textContent = '';
+      container.innerHTML = `<div class="status">Couldn't load games — ${err.message}</div>`;
     }
-  });
-
-  if (changed) saveBets(bets);
-  return changed;
-}
-
-function renderBetsView() {
-  const view = document.getElementById('betsView');
-  const bets = loadBets();
-
-  const decided = bets.filter(b => b.result === 'won' || b.result === 'lost');
-  const pending = bets.filter(b => b.result !== 'won' && b.result !== 'lost');
-  const wins = decided.filter(b => b.result === 'won').length;
-  const record = decided.length ? `${wins}-${decided.length - wins}` : '—';
-
-  let calibrationText = '—';
-  if (decided.length >= 3) {
-    const avgModelProb = decided.reduce((sum, b) => sum + b.modelProb, 0) / decided.length;
-    const actualRate = wins / decided.length;
-    calibrationText = `${(avgModelProb * 100).toFixed(0)}% vs ${(actualRate * 100).toFixed(0)}%`;
-  }
-
-  function betCardHTML(b) {
-    const resultClass = b.result === 'won' ? 'result-won' : (b.result === 'lost' ? 'result-lost' : '');
-    return `
-      <div class="bet-card ${resultClass}">
-        <div class="bet-top"><span>${b.abbr} · ${b.matchup}</span><span>${b.odds}</span></div>
-        ${b.legs ? `<div class="bet-meta">${b.legs.map(l => `${l.label} (${(l.prob * 100).toFixed(0)}%)`).join(' + ')}</div>` : ''}
-        <div class="bet-meta">Model had it at ${(b.modelProb * 100).toFixed(1)}% · logged ${new Date(b.loggedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
-        <div class="bet-actions">
-          <button class="won" onclick="setBetResult('${b.id}','won')">${b.result === 'won' ? '✓ Won' : 'Won'}</button>
-          <button class="lost" onclick="setBetResult('${b.id}','lost')">${b.result === 'lost' ? '✓ Lost' : 'Lost'}</button>
-        </div>
-        <button class="delete-bet" onclick="deleteBet('${b.id}')">Remove</button>
-      </div>
-    `;
-  }
-
-  let html = `
-    <div class="bets-summary">
-      <div><div class="stat-num">${bets.length}</div><div class="stat-label">Logged</div></div>
-      <div><div class="stat-num">${record}</div><div class="stat-label">Record</div></div>
-      <div><div class="stat-num">${calibrationText}</div><div class="stat-label">Model % vs Actual</div></div>
-    </div>
-  `;
-
-  if (!bets.length) {
-    html += `<div class="status">No bets logged yet. Tap "Log bet" next to an odds comparison on a game to start tracking.</div>`;
-  } else {
-    if (pending.length) {
-      html += `<div class="parlay-section-title">Pending</div>`;
-      html += pending.map(betCardHTML).join('');
-    }
-    html += `<div class="parlay-section-title">History${decided.length ? ` (${record})` : ''}</div>`;
-    html += decided.length
-      ? decided.map(betCardHTML).join('')
-      : `<div class="status">No settled bets yet — mark a pending bet Won or Lost once its game finishes.</div>`;
-  }
-
-  view.innerHTML = html;
-}
-
-// ---- Parlay Finder ----
-async function fetchAllStandings(season) {
-  try {
-    const data = await fetchJSON(`/api/standings?season=${season}`);
-    const map = new Map();
-    (data.records || []).forEach(division => {
-      (division.teamRecords || []).forEach(rec => {
-        if (rec.team && rec.team.id != null) map.set(rec.team.id, rec);
-      });
-    });
-    return map;
-  } catch (e) {
-    return new Map();
-  }
-}
-
-function combinations(arr, k) {
-  const results = [];
-  function helper(start, combo) {
-    if (combo.length === k) { results.push(combo.slice()); return; }
-    for (let i = start; i < arr.length; i++) {
-      combo.push(arr[i]);
-      helper(i + 1, combo);
-      combo.pop();
-    }
-  }
-  helper(0, []);
-  return results;
-}
-
-async function loadParlayFinder() {
-  const view = document.getElementById('parlaysView');
-  view.innerHTML = '<div class="status">Scanning today\'s slate…</div>';
-
-  try {
-    const dateStr = fmtDate(currentDate);
-    const data = await fetchJSON(`/api/schedule?date=${dateStr}`);
-    const dates = data.dates || [];
-    const games = dates.length ? dates[0].games : [];
-    const upcoming = games.filter(g => g.status && g.status.abstractGameState === 'Preview');
-
-    if (!upcoming.length) {
-      view.innerHTML = '<div class="status">No upcoming games this day to build parlays from.</div>';
-      return;
-    }
-
-    const season = new Date(currentDate).getFullYear();
-    const standingsMap = await fetchAllStandings(season);
-
-    const legs = [];
-    upcoming.forEach(g => {
-      const awayTeam = g.teams.away.team;
-      const homeTeam = g.teams.home.team;
-      const awayRec = standingsMap.get(awayTeam.id);
-      const homeRec = standingsMap.get(homeTeam.id);
-      if (!awayRec || !homeRec) return;
-
-      const matchupLabel = `${awayTeam.abbreviation || 'AWAY'} @ ${homeTeam.abbreviation || 'HOME'}`;
-      const legBase = {
-        gamePk: g.gamePk, matchup: matchupLabel, gameDate: g.gameDate,
-        awayAbbr: awayTeam.abbreviation, homeAbbr: homeTeam.abbreviation
-      };
-
-      // Moneyline: take whichever side is favored
-      const { homeWinProb, awayWinProb } = computeBaseWinProb(awayRec, homeRec);
-      if (homeWinProb >= awayWinProb) {
-        legs.push({ ...legBase, betType: 'ML', side: 'home', label: `${homeTeam.abbreviation} ML`, prob: homeWinProb });
-      } else {
-        legs.push({ ...legBase, betType: 'ML', side: 'away', label: `${awayTeam.abbreviation} ML`, prob: awayWinProb });
-      }
-
-      // Run line & total, using park factor (free, no extra fetch) but skipping weather/fatigue/pitcher detail
-      const projection = projectRuns(awayRec, homeRec);
-      if (projection) {
-        applyParkFactor(projection, homeTeam.id);
-
-        const rlProbs = runLineProbs(projection, 1.5);
-        if (rlProbs) {
-          if (rlProbs.home >= rlProbs.away) {
-            legs.push({ ...legBase, betType: 'RL', side: 'home', line: 1.5, label: `${homeTeam.abbreviation} -1.5`, prob: rlProbs.home });
-          } else {
-            legs.push({ ...legBase, betType: 'RL', side: 'away', line: 1.5, label: `${awayTeam.abbreviation} +1.5`, prob: rlProbs.away });
-          }
-        }
-
-        const totalLine = Math.round(projection.expectedTotal * 2) / 2;
-        const totProbs = totalProbs(projection, totalLine);
-        if (totProbs) {
-          if (totProbs.over >= totProbs.under) {
-            legs.push({ ...legBase, betType: 'TOT', side: 'over', line: totalLine, label: `Over ${totalLine}`, prob: totProbs.over });
-          } else {
-            legs.push({ ...legBase, betType: 'TOT', side: 'under', line: totalLine, label: `Under ${totalLine}`, prob: totProbs.under });
-          }
-        }
-      }
-    });
-
-    if (legs.length < 2) {
-      view.innerHTML = '<div class="status">Not enough games with usable data to build parlays yet.</div>';
-      return;
-    }
-
-    function buildTopParlays(legCount, topN) {
-      const combos = combinations(legs, legCount)
-        .filter(combo => new Set(combo.map(l => l.gamePk)).size === combo.length) // different games only
-        .map(combo => ({
-          legs: combo,
-          combinedProb: combo.reduce((p, l) => p * l.prob, 1)
-        }))
-        .sort((a, b) => b.combinedProb - a.combinedProb)
-        .slice(0, topN);
-      return combos;
-    }
-
-    const twoLeg = buildTopParlays(2, 8);
-    const threeLeg = buildTopParlays(3, 8);
-
-    function parlayCardHTML(p, idx) {
-      const fairOdds = probToAmerican(p.combinedProb);
-      const fairOddsStr = fairOdds > 0 ? `+${fairOdds}` : `${fairOdds}`;
-      return `
-        <div class="parlay-card">
-          <div class="parlay-legs">
-            ${p.legs.map(l => `<div class="parlay-leg"><span>${l.label} <span style="color:var(--ink-soft);">(${l.matchup})</span></span><span class="leg-prob">${(l.prob * 100).toFixed(0)}%</span></div>`).join('')}
-          </div>
-          <div class="parlay-footer">
-            <div>
-              <div class="parlay-combined">${(p.combinedProb * 100).toFixed(1)}%</div>
-              <div class="parlay-fairodds">fair odds ~${fairOddsStr}</div>
-            </div>
-            <button class="log-bet-btn" style="width:auto; padding:8px 14px;" onclick="logParlay(${idx}, ${p.legs.length})">Log this parlay</button>
-          </div>
-        </div>
-      `;
-    }
-
-    window._parlayCache = { twoLeg, threeLeg };
-
-    let html = `
-      <div class="status" style="padding:14px 18px; text-align:left;">
-        Ranked by combined probability across ${upcoming.length} upcoming games. These use season record, run differential, splits, form, and park factor — not the deeper per-game detail (starters, weather, bullpen) you get by opening a game directly. Independent games only — legs never share a game.
-      </div>
-      <div class="parlay-section-title">Top 2-leg parlays</div>
-      ${twoLeg.map((p, i) => parlayCardHTML(p, i)).join('') || '<div class="status">No valid 2-leg combos found.</div>'}
-      <div class="parlay-section-title">Top 3-leg parlays</div>
-      ${threeLeg.map((p, i) => parlayCardHTML(p, i)).join('') || '<div class="status">No valid 3-leg combos found.</div>'}
-    `;
-
-    view.innerHTML = html;
-  } catch (err) {
-    view.innerHTML = `<div class="error-box">Couldn't build parlays: ${err.message}</div>`;
-  }
-}
-
-function logParlay(idx, legCount) {
-  const cache = window._parlayCache;
-  if (!cache) return;
-  const p = legCount === 2 ? cache.twoLeg[idx] : cache.threeLeg[idx];
-  if (!p) return;
-
-  const bets = loadBets();
-  bets.unshift({
-    id: `parlay-${Date.now()}`,
-    gamePk: null,
-    matchup: p.legs.map(l => l.matchup).join(' / '),
-    betType: 'parlay',
-    team: `${legCount}-leg parlay`,
-    abbr: `${legCount}-leg parlay`,
-    odds: (() => { const o = probToAmerican(p.combinedProb); return o > 0 ? `+${o}` : `${o}`; })(),
-    modelProb: p.combinedProb,
-    legs: p.legs,
-    loggedAt: new Date().toISOString(),
-    gameDate: null,
-    result: null
-  });
-  saveBets(bets);
-}
-
-// ---- Backtest ----
-function renderBacktestView() {
-  const view = document.getElementById('backtestView');
-  if (view.dataset.rendered === 'true') return; // don't wipe results if already run
-  const today = new Date();
-  const thirtyDaysAgo = new Date(today);
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const fmtInput = (d) => d.toISOString().slice(0, 10);
-
-  view.innerHTML = `
-    <div class="status" style="padding:14px 18px; text-align:left;">
-      Tests the full moneyline blend — record, Pythagorean win expectation, home/away splits, and recent
-      form — against real completed games, using team standings and actual run-differential-to-date exactly
-      as they stood before each game (reconstructed from real final scores, not today's stats — that would
-      be cheating). Doesn't include FIP, weather, park factors, or Kalshi, since those aren't reliably
-      reconstructable for past dates. First run loads the full season's game log, which takes a little
-      longer; after that, bigger date ranges just mean more days to loop through.
-    </div>
-    <div style="padding: 0 18px 14px; display:flex; gap:10px; align-items:flex-end;">
-      <div style="flex:1;">
-        <label style="display:block; font-size:11px; color:var(--ink-soft); margin-bottom:4px;">Start date</label>
-        <input type="date" id="btStart" value="${fmtInput(thirtyDaysAgo)}" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--line); background:var(--chalk); color:var(--ink); font-family:inherit;">
-      </div>
-      <div style="flex:1;">
-        <label style="display:block; font-size:11px; color:var(--ink-soft); margin-bottom:4px;">End date</label>
-        <input type="date" id="btEnd" value="${fmtInput(today)}" style="width:100%; padding:8px; border-radius:6px; border:1px solid var(--line); background:var(--chalk); color:var(--ink); font-family:inherit;">
-      </div>
-    </div>
-    <div style="padding: 0 18px 14px;">
-      <button class="log-bet-btn" id="btRunBtn" style="width:100%;">Run backtest</button>
-    </div>
-    <div id="btResults"></div>
-  `;
-  view.dataset.rendered = 'true';
-
-  document.getElementById('btRunBtn').addEventListener('click', runBacktest);
-}
-
-async function runBacktest() {
-  const startStr = document.getElementById('btStart').value;
-  const endStr = document.getElementById('btEnd').value;
-  const resultsEl = document.getElementById('btResults');
-  const btn = document.getElementById('btRunBtn');
-  if (!startStr || !endStr) return;
-
-  const start = new Date(startStr + 'T12:00:00Z');
-  const end = new Date(endStr + 'T12:00:00Z');
-  if (start > end) {
-    resultsEl.innerHTML = `<div class="error-box">Start date must be before end date.</div>`;
-    return;
-  }
-
-  const dayCount = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
-  btn.disabled = true;
-  btn.textContent = 'Loading season game log…';
-
-  // Build a real, point-in-time run differential log from actual final scores — one fetch
-  // for the whole season, instead of relying on a "stats as of today" endpoint that can't
-  // tell us what a team's run differential looked like on a past date.
-  const seasonYear = end.getUTCFullYear();
-  const seasonLog = {}; // teamId -> [{ date, runsScored, runsAllowed }], chronological
-  try {
-    const seasonData = await fetchJSON(
-      `/api/schedule?startDate=${seasonYear}-01-01&endDate=${fmtDate(end)}&gameType=R`
-    );
-    const seasonDates = seasonData.dates || [];
-    seasonDates.forEach(day => {
-      (day.games || []).forEach(g => {
-        if (!g.status || g.status.abstractGameState !== 'Final') return;
-        const homeScore = g.teams.home.score;
-        const awayScore = g.teams.away.score;
-        if (homeScore == null || awayScore == null) return;
-        const gDate = g.gameDate;
-        const homeId = g.teams.home.team.id;
-        const awayId = g.teams.away.team.id;
-        if (!seasonLog[homeId]) seasonLog[homeId] = [];
-        if (!seasonLog[awayId]) seasonLog[awayId] = [];
-        seasonLog[homeId].push({ date: gDate, runsScored: homeScore, runsAllowed: awayScore });
-        seasonLog[awayId].push({ date: gDate, runsScored: awayScore, runsAllowed: homeScore });
-      });
-    });
-    Object.values(seasonLog).forEach(arr => arr.sort((a, b) => new Date(a.date) - new Date(b.date)));
-  } catch (e) {
-    resultsEl.innerHTML = `<div class="error-box">Couldn't load the season game log: ${e.message}</div>`;
-    btn.disabled = false;
-    btn.textContent = 'Run backtest';
-    return;
-  }
-
-  function cumulativeRunsAsOf(teamId, beforeDate) {
-    const log = seasonLog[teamId];
-    if (!log) return null;
-    let rs = 0, ra = 0, count = 0;
-    for (const entry of log) {
-      if (new Date(entry.date) >= new Date(beforeDate)) break; // log is sorted, safe to stop
-      rs += entry.runsScored;
-      ra += entry.runsAllowed;
-      count++;
-    }
-    return count > 0 ? { runsScored: rs, runsAllowed: ra } : null;
-  }
-
-  const predictions = []; // { predictedHomeProb, homeWon }
-  let daysProcessed = 0;
-  let errors = 0;
-
-  async function processDay(d) {
-    const dateStr = fmtDate(d);
-    const prevDay = new Date(d);
-    prevDay.setDate(prevDay.getDate() - 1);
-    const season = d.getFullYear();
-
-    const [schedData, standingsData] = await Promise.all([
-      fetchJSON(`/api/schedule?date=${dateStr}`),
-      fetchJSON(`/api/standings-on-date?date=${fmtDate(prevDay)}&season=${season}`)
-    ]);
-
-    const dates = schedData.dates || [];
-    const games = dates.length ? dates[0].games : [];
-    const finalGames = games.filter(g => g.status && g.status.abstractGameState === 'Final');
-
-    const dayPredictions = [];
-    finalGames.forEach(g => {
-      const awayId = g.teams.away.team.id;
-      const homeId = g.teams.home.team.id;
-      const awayRec = standingsData.teams[awayId];
-      const homeRec = standingsData.teams[homeId];
-      if (!awayRec || !homeRec) return;
-
-      const awayRuns = cumulativeRunsAsOf(awayId, g.gameDate);
-      const homeRuns = cumulativeRunsAsOf(homeId, g.gameDate);
-      const awayPyth = awayRuns ? pythPct(awayRuns) : null;
-      const homePyth = homeRuns ? pythPct(homeRuns) : null;
-
-      // Full model blend now — record, real point-in-time Pythagorean, splits, and form.
-      const awayPct = blendPct(pctFromRecord(awayRec), awayPyth, splitPct(awayRec, 'away'), last10Pct(awayRec));
-      const homePct = blendPct(pctFromRecord(homeRec), homePyth, splitPct(homeRec, 'home'), last10Pct(homeRec));
-      const predictedHomeProb = applyShrinkage(log5(homePct, awayPct), MONEYLINE_SHRINKAGE);
-
-      const homeScore = g.teams.home.score;
-      const awayScore = g.teams.away.score;
-      if (homeScore == null || awayScore == null) return;
-      const homeWon = homeScore > awayScore;
-
-      dayPredictions.push({ predictedHomeProb, homeWon });
-    });
-    return dayPredictions;
-  }
-
-  // Process in batches of concurrent days rather than one at a time — much faster for wide
-  // ranges, while still staying reasonable about how many requests fire at once.
-  const BATCH_SIZE = 8;
-  const allDays = [];
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) allDays.push(new Date(d));
-
-  for (let i = 0; i < allDays.length; i += BATCH_SIZE) {
-    const batch = allDays.slice(i, i + BATCH_SIZE);
-    btn.textContent = `Running… day ${Math.min(i + BATCH_SIZE, allDays.length)}/${dayCount}`;
-
-    const results = await Promise.all(batch.map(d =>
-      processDay(d).catch(() => { errors++; return []; })
-    ));
-    results.forEach(dayPreds => predictions.push(...dayPreds));
-    daysProcessed += batch.length;
-  }
-
-  btn.disabled = false;
-  btn.textContent = 'Run backtest';
-
-  if (!predictions.length) {
-    resultsEl.innerHTML = `<div class="error-box">No completed games found in that range (or data couldn't be fetched — try a range from earlier this season).</div>`;
-    return;
-  }
-
-  // Bucket by predicted probability (of whichever side was favored, 50-100%) in 5-point bands.
-  const buckets = {};
-  let brierSum = 0;
-  predictions.forEach(p => {
-    const favoredProb = p.predictedHomeProb >= 0.5 ? p.predictedHomeProb : 1 - p.predictedHomeProb;
-    const favoredWon = p.predictedHomeProb >= 0.5 ? p.homeWon : !p.homeWon;
-    const bucketKey = Math.min(95, Math.floor(favoredProb * 20) * 5); // 50,55,...,95
-    if (!buckets[bucketKey]) buckets[bucketKey] = { n: 0, wins: 0 };
-    buckets[bucketKey].n++;
-    if (favoredWon) buckets[bucketKey].wins++;
-
-    const actual = p.homeWon ? 1 : 0;
-    brierSum += Math.pow(p.predictedHomeProb - actual, 2);
-  });
-  const brierScore = brierSum / predictions.length;
-
-  const bucketKeys = Object.keys(buckets).map(Number).sort((a, b) => a - b);
-  const rows = bucketKeys.map(k => {
-    const b = buckets[k];
-    const actualPct = (b.wins / b.n) * 100;
-    const predictedMid = k + 2.5;
-    const diff = actualPct - predictedMid;
-    const diffClass = Math.abs(diff) <= 5 ? 'pos' : 'neg';
-    return `
-      <div class="parlay-leg" style="padding:8px 0; border-bottom:1px solid var(--line);">
-        <span>${k}-${k + 5}% predicted (n=${b.n})</span>
-        <span class="leg-prob" style="color:${diffClass === 'pos' ? 'var(--field)' : 'var(--neg)'};">${actualPct.toFixed(1)}% actual</span>
-      </div>
-    `;
-  }).join('');
-
-  resultsEl.innerHTML = `
-    <div class="bets-summary">
-      <div><div class="stat-num">${predictions.length}</div><div class="stat-label">Games tested</div></div>
-      <div><div class="stat-num">${brierScore.toFixed(3)}</div><div class="stat-label">Brier score</div></div>
-      <div><div class="stat-num">${errors}</div><div class="stat-label">Days skipped</div></div>
-    </div>
-    <div class="parlay-section-title">Calibration — predicted vs. actual</div>
-    <div class="parlay-card">
-      ${rows}
-      <div style="font-size:10.5px; color:var(--ink-soft); margin-top:10px; line-height:1.5;">
-        Each row groups games by how confident the model was in the favorite, then checks how often the favorite actually won.
-        Well-calibrated means these numbers stay close together — e.g. "70-75% predicted" games should see the favorite win
-        roughly 70-75% of the time. Brier score measures overall accuracy (0 = perfect, 0.25 = coin-flip guessing, lower is better).
-        ${errors > 0 ? `${errors} day(s) couldn't be fetched and were skipped.` : ''}
-      </div>
-    </div>
-  `;
-}
-
-
-function showTab(tabName) {
-  const tabs = { games: 'tabGames', parlays: 'tabParlays', bets: 'tabBets', backtest: 'tabBacktest' };
-  const views = { games: 'gamesView', parlays: 'parlaysView', bets: 'betsView', backtest: 'backtestView' };
-  Object.keys(tabs).forEach(key => {
-    document.getElementById(tabs[key]).classList.toggle('active', key === tabName);
-    document.getElementById(views[key]).style.display = key === tabName ? '' : 'none';
-  });
-  document.getElementById('datebarEl').style.display = tabName === 'games' ? '' : 'none';
-  if (tabName === 'bets') {
-    renderBetsView();
-    autoGradeBets().then(changed => { if (changed) renderBetsView(); });
-  }
-  if (tabName === 'parlays') loadParlayFinder();
-  if (tabName === 'backtest') renderBacktestView();
-}
-
-document.getElementById('tabGames').addEventListener('click', () => showTab('games'));
-document.getElementById('tabParlays').addEventListener('click', () => showTab('parlays'));
-document.getElementById('tabBets').addEventListener('click', () => showTab('bets'));
-document.getElementById('tabBacktest').addEventListener('click', () => showTab('backtest'));
-
-loadGames();
+  })();
 </script>
+
+<footer>
+  Model combines current-season form with a previous-season baseline pulled toward league average, using point differential, record, and home/away splits. Not a guarantee, and it doesn't see injuries or coaching matchups yet.
+</footer>
 </body>
 </html>
