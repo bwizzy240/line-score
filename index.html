@@ -421,7 +421,7 @@
 </main>
 
 <footer>
-  Model blends run differential (Pythagorean win expectation), season record, home/away-specific record, recent form, starting pitcher FIP/ERA, park factors, current weather, bullpen workload, lineup strength (once posted), and season head-to-head — it is not a guarantee and doesn't account for everything a sportsbook prices in. Recent injured-list moves are shown for context but aren't folded into the numbers directly. Use it as one input, not the whole decision. Bet only what you can afford to lose.
+  Model blends run differential (Pythagorean win expectation), season record, home/away-specific record, recent form, starting pitcher FIP/ERA, park factors, current weather, bullpen workload, lineup strength (once posted), and season head-to-head, with a calibration adjustment based on backtested results — it is not a guarantee and doesn't account for everything a sportsbook prices in. Recent injured-list moves are shown for context but aren't folded into the numbers directly. Use it as one input, not the whole decision. Bet only what you can afford to lose.
 </footer>
 
 <script>
@@ -812,10 +812,20 @@ function blendPct(overall, pyth, split, l10) {
   return weightSum > 0 ? valueSum / weightSum : 0.5;
 }
 
+// The backtest showed predictions running consistently a few points overconfident (e.g. games
+// predicted 60-65% actually landed at ~57.6%). Shrinkage pulls raw predictions partway back
+// toward 50/50 to correct for that. This is a first-pass correction based on one 30-day sample —
+// worth re-running the backtest after this change and adjusting the factor if needed, not treating
+// 0.85 as scientifically exact.
+const MONEYLINE_SHRINKAGE = 0.85;
+function applyShrinkage(prob, factor) {
+  return 0.5 + (prob - 0.5) * factor;
+}
+
 function computeBaseWinProb(awayRec, homeRec) {
   const awayPct = blendPct(pctFromRecord(awayRec), pythPct(awayRec), splitPct(awayRec, 'away'), last10Pct(awayRec));
   const homePct = blendPct(pctFromRecord(homeRec), pythPct(homeRec), splitPct(homeRec, 'home'), last10Pct(homeRec));
-  const homeWinProb = log5(homePct, awayPct);
+  const homeWinProb = applyShrinkage(log5(homePct, awayPct), MONEYLINE_SHRINKAGE);
   return { homeWinProb, awayWinProb: 1 - homeWinProb };
 }
 
@@ -2264,7 +2274,7 @@ async function runBacktest() {
         // Full model blend now — record, real point-in-time Pythagorean, splits, and form.
         const awayPct = blendPct(pctFromRecord(awayRec), awayPyth, splitPct(awayRec, 'away'), last10Pct(awayRec));
         const homePct = blendPct(pctFromRecord(homeRec), homePyth, splitPct(homeRec, 'home'), last10Pct(homeRec));
-        const predictedHomeProb = log5(homePct, awayPct);
+        const predictedHomeProb = applyShrinkage(log5(homePct, awayPct), MONEYLINE_SHRINKAGE);
 
         const homeScore = g.teams.home.score;
         const awayScore = g.teams.away.score;
