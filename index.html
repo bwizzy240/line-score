@@ -654,7 +654,7 @@ async function getTeamContext(teamId, pitcherId, gameDate, currentVenueId) {
     const params = new URLSearchParams({ teamId, beforeDate: gameDate });
     if (pitcherId) params.set('pitcherId', pitcherId);
     if (currentVenueId) params.set('currentVenueId', currentVenueId);
-    return await fetchJSON(`/api/team-context?${params.toString()}`);
+    return await fetchJSON(`/api/team-info?${params.toString()}`);
   } catch (e) {
     return null;
   }
@@ -663,7 +663,7 @@ async function getTeamContext(teamId, pitcherId, gameDate, currentVenueId) {
 async function getRecentGames(teamId, gameDate) {
   if (!teamId || !gameDate) return null;
   try {
-    return await fetchJSON(`/api/recent-games?teamId=${teamId}&beforeDate=${encodeURIComponent(gameDate)}`);
+    return await fetchJSON(`/api/team-info?teamId=${teamId}&beforeDate=${encodeURIComponent(gameDate)}`);
   } catch (e) {
     return null;
   }
@@ -682,7 +682,8 @@ function fatigueRunsAdjustment(recentGames) {
 async function getHeadToHead(teamId, opponentId, season, beforeDate) {
   if (!teamId || !opponentId || !season) return null;
   try {
-    return await fetchJSON(`/api/head-to-head?teamId=${teamId}&opponentId=${opponentId}&season=${season}&beforeDate=${encodeURIComponent(beforeDate)}`);
+    const data = await fetchJSON(`/api/team-info?teamId=${teamId}&opponentId=${opponentId}&season=${season}&beforeDate=${encodeURIComponent(beforeDate)}`);
+    return data ? data.h2h : null;
   } catch (e) {
     return null;
   }
@@ -706,7 +707,7 @@ async function getRecentTransactions(teamId) {
 
 async function getKalshiOdds(awayAbbr, homeAbbr) {
   try {
-    return await fetchJSON(`/api/kalshi-odds?away=${awayAbbr}&home=${homeAbbr}`);
+    return await fetchJSON(`/api/kalshi?type=moneyline&away=${awayAbbr}&home=${homeAbbr}`);
   } catch (e) {
     return null;
   }
@@ -714,7 +715,7 @@ async function getKalshiOdds(awayAbbr, homeAbbr) {
 
 async function getKalshiRunLine(awayAbbr, homeAbbr) {
   try {
-    return await fetchJSON(`/api/kalshi-runline?away=${awayAbbr}&home=${homeAbbr}`);
+    return await fetchJSON(`/api/kalshi?type=runline&away=${awayAbbr}&home=${homeAbbr}`);
   } catch (e) {
     return null;
   }
@@ -722,7 +723,7 @@ async function getKalshiRunLine(awayAbbr, homeAbbr) {
 
 async function getKalshiTotal(awayAbbr, homeAbbr) {
   try {
-    return await fetchJSON(`/api/kalshi-total?away=${awayAbbr}&home=${homeAbbr}`);
+    return await fetchJSON(`/api/kalshi?type=total&away=${awayAbbr}&home=${homeAbbr}`);
   } catch (e) {
     return null;
   }
