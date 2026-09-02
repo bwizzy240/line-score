@@ -2240,64 +2240,52 @@ async function runBacktest() {
   let daysProcessed = 0;
   let errors = 0;
 
-  async function processDay(d) {
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
     const dateStr = fmtDate(d);
-    const prevDay = new Date(d);
-    prevDay.setDate(prevDay.getDate() - 1);
-    const season = d.getFullYear();
+    daysProcessed++;
+    btn.textContent = `Running… day ${daysProcessed}/${dayCount}`;
 
-    const [schedData, standingsData] = await Promise.all([
-      fetchJSON(`/api/schedule?date=${dateStr}`),
-      fetchJSON(`/api/standings-on-date?date=${fmtDate(prevDay)}&season=${season}`)
-    ]);
+    try {
+      const prevDay = new Date(d);
+      prevDay.setDate(prevDay.getDate() - 1);
+      const season = d.getFullYear();
 
-    const dates = schedData.dates || [];
-    const games = dates.length ? dates[0].games : [];
-    const finalGames = games.filter(g => g.status && g.status.abstractGameState === 'Final');
+      const [schedData, standingsData] = await Promise.all([
+        fetchJSON(`/api/schedule?date=${dateStr}`),
+        fetchJSON(`/api/standings-on-date?date=${fmtDate(prevDay)}&season=${season}`)
+      ]);
 
-    const dayPredictions = [];
-    finalGames.forEach(g => {
-      const awayId = g.teams.away.team.id;
-      const homeId = g.teams.home.team.id;
-      const awayRec = standingsData.teams[awayId];
-      const homeRec = standingsData.teams[homeId];
-      if (!awayRec || !homeRec) return;
+      const dates = schedData.dates || [];
+      const games = dates.length ? dates[0].games : [];
+      const finalGames = games.filter(g => g.status && g.status.abstractGameState === 'Final');
 
-      const awayRuns = cumulativeRunsAsOf(awayId, g.gameDate);
-      const homeRuns = cumulativeRunsAsOf(homeId, g.gameDate);
-      const awayPyth = awayRuns ? pythPct(awayRuns) : null;
-      const homePyth = homeRuns ? pythPct(homeRuns) : null;
+      finalGames.forEach(g => {
+        const awayId = g.teams.away.team.id;
+        const homeId = g.teams.home.team.id;
+        const awayRec = standingsData.teams[awayId];
+        const homeRec = standingsData.teams[homeId];
+        if (!awayRec || !homeRec) return;
 
-      // Full model blend now — record, real point-in-time Pythagorean, splits, and form.
-      const awayPct = blendPct(pctFromRecord(awayRec), awayPyth, splitPct(awayRec, 'away'), last10Pct(awayRec));
-      const homePct = blendPct(pctFromRecord(homeRec), homePyth, splitPct(homeRec, 'home'), last10Pct(homeRec));
-      const predictedHomeProb = applyShrinkage(log5(homePct, awayPct), MONEYLINE_SHRINKAGE);
+        const awayRuns = cumulativeRunsAsOf(awayId, g.gameDate);
+        const homeRuns = cumulativeRunsAsOf(homeId, g.gameDate);
+        const awayPyth = awayRuns ? pythPct(awayRuns) : null;
+        const homePyth = homeRuns ? pythPct(homeRuns) : null;
 
-      const homeScore = g.teams.home.score;
-      const awayScore = g.teams.away.score;
-      if (homeScore == null || awayScore == null) return;
-      const homeWon = homeScore > awayScore;
+        // Full model blend now — record, real point-in-time Pythagorean, splits, and form.
+        const awayPct = blendPct(pctFromRecord(awayRec), awayPyth, splitPct(awayRec, 'away'), last10Pct(awayRec));
+        const homePct = blendPct(pctFromRecord(homeRec), homePyth, splitPct(homeRec, 'home'), last10Pct(homeRec));
+        const predictedHomeProb = applyShrinkage(log5(homePct, awayPct), MONEYLINE_SHRINKAGE);
 
-      dayPredictions.push({ predictedHomeProb, homeWon });
-    });
-    return dayPredictions;
-  }
+        const homeScore = g.teams.home.score;
+        const awayScore = g.teams.away.score;
+        if (homeScore == null || awayScore == null) return;
+        const homeWon = homeScore > awayScore;
 
-  // Process in batches of concurrent days rather than one at a time — much faster for wide
-  // ranges, while still staying reasonable about how many requests fire at once.
-  const BATCH_SIZE = 8;
-  const allDays = [];
-  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) allDays.push(new Date(d));
-
-  for (let i = 0; i < allDays.length; i += BATCH_SIZE) {
-    const batch = allDays.slice(i, i + BATCH_SIZE);
-    btn.textContent = `Running… day ${Math.min(i + BATCH_SIZE, allDays.length)}/${dayCount}`;
-
-    const results = await Promise.all(batch.map(d =>
-      processDay(d).catch(() => { errors++; return []; })
-    ));
-    results.forEach(dayPreds => predictions.push(...dayPreds));
-    daysProcessed += batch.length;
+        predictions.push({ predictedHomeProb, homeWon });
+      });
+    } catch (e) {
+      errors++;
+    }
   }
 
   btn.disabled = false;
