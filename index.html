@@ -600,7 +600,7 @@ async function loadGames() {
 }
 
 let openGameId = null;
-let liveProbContext = null; // set by renderMatchup, used by the periodic Kalshi re-blend below
+let liveProbContext = null; // set by renderMatchup, used to track Kalshi line movement while a game is open
 
 function selectGame(gamePk, rowEl) {
   const matchupEl = document.getElementById('matchupContainer');
@@ -1091,19 +1091,14 @@ async function renderMatchup(gamePk) {
       homeWinProb = Math.min(0.95, Math.max(0.05, homeWinProb - h2hShift));
     }
 
-    // Blend in Kalshi's live market price when available. The market aggregates information
-    // (injury news, sharp money, etc.) our model doesn't see, so it gets real weight — but
-    // capped so a single external source can't fully override our own calculation.
-    const baseHomeWinProbForLive = homeWinProb; // saved pre-Kalshi, so live refresh can re-blend without a full recompute
+    // Kalshi's live price is fetched for comparison and line-movement tracking — not blended
+    // into the model's own probability, which stays purely our own calculation.
     let kalshiHomeProb = null;
     const homeAbbrForKalshi = homeTeam.abbreviation || 'HOME';
     const awayAbbrForKalshi = awayTeam.abbreviation || 'AWAY';
     if (kalshiML && kalshiML.available) {
       if (kalshiML.yesTeam === homeAbbrForKalshi) kalshiHomeProb = kalshiML.yesProb;
       else if (kalshiML.yesTeam === awayAbbrForKalshi) kalshiHomeProb = 1 - kalshiML.yesProb;
-    }
-    if (kalshiHomeProb !== null) {
-      homeWinProb = homeWinProb * 0.6 + kalshiHomeProb * 0.4;
     }
 
     let kalshiMovement = null;
@@ -1117,7 +1112,7 @@ async function renderMatchup(gamePk) {
     const awayPctDisplay = 100 - homePctDisplay;
 
     liveProbContext = {
-      gamePk, baseHomeWinProb: baseHomeWinProbForLive,
+      gamePk,
       awayAbbr: awayAbbrForKalshi, homeAbbr: homeAbbrForKalshi
     };
 
@@ -1246,7 +1241,7 @@ async function renderMatchup(gamePk) {
             <div class="away" id="awayPctBar" style="width:${awayPctDisplay}%"></div>
             <div class="home" id="homePctBar" style="width:${homePctDisplay}%"></div>
           </div>
-          <div class="probbar-caption" id="probCaption">Chance to win — based on team strength, recent form, ballpark, today's starters${kalshiHomeProb !== null ? ', and live Kalshi market pricing (auto-updates every 20s)' : ''}${h2h && h2h.gamesPlayed > 0 ? `<br>Season series: ${awayTeam.abbreviation || 'Away'} ${h2h.wins}-${h2h.losses} vs ${homeTeam.abbreviation || 'Home'}${h2h.gamesPlayed < 3 ? ' (too few games to count yet)' : ''}` : ''}</div>
+          <div class="probbar-caption" id="probCaption">Chance to win — based on team strength, recent form, ballpark, and today's starters${h2h && h2h.gamesPlayed > 0 ? `<br>Season series: ${awayTeam.abbreviation || 'Away'} ${h2h.wins}-${h2h.losses} vs ${homeTeam.abbreviation || 'Home'}${h2h.gamesPlayed < 3 ? ' (too few games to count yet)' : ''}` : ''}</div>
           <div id="kalshiMovement" style="text-align:center; font-size:11px; color:var(--accent); margin-top:6px;">${kalshiMovement ? `Kalshi line moved ${Math.abs(Math.round(kalshiMovement.delta * 100))}pt toward ${kalshiMovement.delta > 0 ? homeAbbrForKalshi : awayAbbrForKalshi} over the last ${kalshiMovement.minutesAgo} min` : ''}</div>
         </div>
 
@@ -1461,22 +1456,6 @@ async function renderMatchup(gamePk) {
         const lineVal = parseFloat(runLineNumInput.value);
         if (isNaN(lineVal)) { document.getElementById('runLineResultBox').innerHTML = ''; return; }
         const probs = runLineProbs(projection, Math.abs(lineVal));
-
-        // Only blend in Kalshi's spread market when its line is essentially the same as
-        // what's entered here — blending mismatched lines would compare apples to oranges.
-        if (probs && kalshiRL && kalshiRL.available) {
-          const matchLine = kalshiRL.lines.find(l => Math.abs(l.line - Math.abs(lineVal)) < 0.1);
-          if (matchLine) {
-            let kalshiHomeCoverProb = null;
-            if (matchLine.favoredTeam === (homeTeam.abbreviation || 'HOME')) kalshiHomeCoverProb = matchLine.yesProb;
-            else if (matchLine.favoredTeam === (awayTeam.abbreviation || 'AWAY')) kalshiHomeCoverProb = 1 - matchLine.yesProb;
-            if (kalshiHomeCoverProb !== null) {
-              probs.home = probs.home * 0.6 + kalshiHomeCoverProb * 0.4;
-              probs.away = 1 - probs.home;
-            }
-          }
-        }
-
         computeRunLineEdge(awayRLInput.value, homeRLInput.value, probs, awayTeam.abbreviation || 'AWAY', homeTeam.abbreviation || 'HOME', Math.abs(lineVal));
       };
       runLineNumInput.addEventListener('input', computeRL);
@@ -1716,7 +1695,7 @@ setInterval(refreshLiveScores, 30000);
 
 async function refreshLiveProbability() {
   if (!liveProbContext) return;
-  const { gamePk, baseHomeWinProb, awayAbbr, homeAbbr } = liveProbContext;
+  const { gamePk, awayAbbr, homeAbbr } = liveProbContext;
   if (String(openGameId) !== String(gamePk)) return;
 
   const k = await getKalshiOdds(awayAbbr, homeAbbr);
@@ -1725,25 +1704,14 @@ async function refreshLiveProbability() {
     if (k.yesTeam === homeAbbr) kalshiHomeProb = k.yesProb;
     else if (k.yesTeam === awayAbbr) kalshiHomeProb = 1 - k.yesProb;
   }
-  if (kalshiHomeProb === null) return; // no fresh price — leave the displayed number as-is
+  if (kalshiHomeProb === null) return; // no fresh price
 
   recordKalshiSnapshot(gamePk, kalshiHomeProb);
   const movement = getKalshiMovement(gamePk, kalshiHomeProb);
 
-  const homeWinProb = baseHomeWinProb * 0.6 + kalshiHomeProb * 0.4;
-  const awayWinProb = 1 - homeWinProb;
-  const homePctDisplay = Math.round(homeWinProb * 100);
-  const awayPctDisplay = 100 - homePctDisplay;
-
-  const awayPctNum = document.getElementById('awayPctNum');
-  const homePctNum = document.getElementById('homePctNum');
-  const awayPctBar = document.getElementById('awayPctBar');
-  const homePctBar = document.getElementById('homePctBar');
+  // Our model's own probability doesn't change here — only the Kalshi movement note updates,
+  // since the model number is no longer blended with the market.
   const movementEl = document.getElementById('kalshiMovement');
-  if (awayPctNum) awayPctNum.textContent = `${awayPctDisplay}%`;
-  if (homePctNum) homePctNum.textContent = `${homePctDisplay}%`;
-  if (awayPctBar) awayPctBar.style.width = `${awayPctDisplay}%`;
-  if (homePctBar) homePctBar.style.width = `${homePctDisplay}%`;
   if (movementEl) {
     movementEl.textContent = movement
       ? `Kalshi line moved ${Math.abs(Math.round(movement.delta * 100))}pt toward ${movement.delta > 0 ? homeAbbr : awayAbbr} over the last ${movement.minutesAgo} min`
